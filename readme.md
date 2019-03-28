@@ -4,7 +4,13 @@ A simple script which uses libbluray in order to work which is the main title fo
 
 ## Dependencies
 
-Expects libbluray to be on your path.
+### Linux 
+
+Expects libbluray-dev to be installed
+
+### Windows
+
+You have to build PyBluread yourself, see https://github.com/3ll3d00d/PyBluRead
 
 ## Exe
 
@@ -14,4 +20,4 @@ to create an exe
     
 produces 
 
-    dist/beqdesigner.exe
+    dist/madmeasurer.exe

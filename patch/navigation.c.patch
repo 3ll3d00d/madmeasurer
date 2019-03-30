@@ -1,0 +1,125 @@
+diff --git a/src/libbluray/bdnav/navigation.c b/src/libbluray/bdnav/navigation.c
+index f8228ca2..f94bf277 100644
+--- a/src/libbluray/bdnav/navigation.c
++++ b/src/libbluray/bdnav/navigation.c
+@@ -328,8 +328,25 @@ static int _pl_guess_main_title(const MPLS_PL *p1, const MPLS_PL *p2,
+     uint32_t d1 = _pl_duration(p1);
+     uint32_t d2 = _pl_duration(p2);
+ 
+-    /* if both longer than 30 min */
+-    if (d1 > 30*60*45000 && d2 > 30*60*45000) {
++	BD_DEBUG(DBG_MAIN_PL, "Guessing main title (%s,%s) (%d,%d)\n",
++		mpls_id1, mpls_id2, d1, d2);
++
++	if (d1 < 30 * 60 * 45000 && d2 >= 30 * 60 * 45000) {
++		BD_DEBUG(DBG_MAIN_PL, "main title is 2 (%s,%s): > 30mins\n",
++			mpls_id1, mpls_id2);
++		return 1;
++	}
++	else if (d1 >= 30 * 60 * 45000 && d2 < 30 * 60 * 45000) {
++		BD_DEBUG(DBG_MAIN_PL, "main title is 1 (%s,%s): > 30mins\n",
++			mpls_id1, mpls_id2);
++		return -1;
++	}
++	else if (d1 < 30 * 60 * 45000 && d2 < 30 * 60 * 45000) {
++		BD_DEBUG(DBG_MAIN_PL, "no main title (%s,%s): too short\n",
++			mpls_id1, mpls_id2);
++		return 0;
++	} else if (d1 > 30 * 60 * 45000 && d2 > 30 * 60 * 45000) {
++		/* if both longer than 30 min */
+ 
+         /* prefer many chapters over no chapters */
+         int chap1 = _pl_chapter_count(p1);
+@@ -340,7 +357,11 @@ static int _pl_guess_main_title(const MPLS_PL *p1, const MPLS_PL *p2,
+             BD_DEBUG(DBG_MAIN_PL, "main title (%s,%s): chapter count difference %d\n",
+                      mpls_id1, mpls_id2, chap_diff);
+             return chap_diff;
+-        }
++		}
++		else {
++			BD_DEBUG(DBG_MAIN_PL, "main title (%s,%s): chapter counts (%d,%d)\n",
++				mpls_id1, mpls_id2, chap1, chap2);
++		}
+ 
+         /* Check video: prefer HD over SD, H.264/VC1 over MPEG1/2 */
+         int vid_diff = _cmp_video_props(p1, p2);
+@@ -367,22 +388,35 @@ static int _pl_guess_main_title(const MPLS_PL *p1, const MPLS_PL *p2,
+                 BD_DEBUG(DBG_MAIN_PL, "main title (%s,%s): prefer \"known\" playlist %s\n",
+                          mpls_id1, mpls_id2, known_diff < 0 ? mpls_id1 : mpls_id2);
+                 return known_diff;
+-            }
++			}
++			else {
++				BD_DEBUG(DBG_MAIN_PL, "main title (%s,%s): no \"known\" playlist (%s,%s)\n",
++					mpls_id1, mpls_id2, mpls_id1, mpls_id2);
++			}
+         }
+-    }
++	} else {
++		BD_DEBUG(DBG_MAIN_PL, "No main title guess (%s,%s)\n", mpls_id1, mpls_id2);
++	}
+ 
+     /* compare playlist duration, select longer playlist */
++	int duration_diff = d2 - d1;
+     if (d1 < d2) {
+-        return 1;
++		BD_DEBUG(DBG_MAIN_PL, "main title is 2 (%s,%s) : duration\n", mpls_id1, mpls_id2);
+     }
+     if (d1 > d2) {
+-        return -1;
++		BD_DEBUG(DBG_MAIN_PL, "main title is 1 (%s,%s) : duration\n", mpls_id1, mpls_id2);
+     }
+ 
+-    /* prefer playlist with higher number of tracks */
++	/* prefer playlist with higher number of tracks */
+     int sc1 = _pl_streams_score(p1);
+     int sc2 = _pl_streams_score(p2);
+-    return sc2 - sc1;
++	if (sc1 < sc2) {
++		BD_DEBUG(DBG_MAIN_PL, "main title is 2 (%s,%s) : track count\n", mpls_id1, mpls_id2);
++	}
++	if (sc1 > sc2) {
++		BD_DEBUG(DBG_MAIN_PL, "main title is 1 (%s,%s) : track count\n", mpls_id1, mpls_id2);
++	}
++	return duration_diff != 0 ? duration_diff : sc2 - sc1;
+ }
+ 
+ /*
+@@ -441,7 +475,7 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+         }
+         pl = mpls_get(disc, ent.d_name);
+         if (pl != NULL) {
+-            if ((flags & TITLES_FILTER_DUP_TITLE) &&
++			if ((flags & TITLES_FILTER_DUP_TITLE) &&
+                 !_filter_dup(pl_list, ii, pl)) {
+                 mpls_free(&pl);
+                 continue;
+@@ -452,6 +486,7 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+             }
+             if (min_title_length > 0 &&
+                 _pl_duration(pl) < min_title_length*45000) {
++				BD_DEBUG(DBG_MAIN_PL, "Discarding on min title length (%s)\n", ent.d_name);
+                 mpls_free(&pl);
+                 continue;
+             }
+@@ -471,14 +506,17 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+             /* main title guessing */
+             if (_filter_dup(pl_list, ii, pl) &&
+                 _filter_repeats(pl, 2)) {
+-
+                 if (_pl_guess_main_title(pl_list[ii], pl_list[title_list->main_title_idx],
+                                          ent.d_name,
+                                          title_list->title_info[title_list->main_title_idx].name,
+                                          known_mpls_ids) <= 0) {
+-                    title_list->main_title_idx = ii;
++					BD_DEBUG(DBG_MAIN_PL, "New main title located (%s)\n", ent.d_name);
++					title_list->main_title_idx = ii;
+                 }
+-            }
++			}
++			else {
++				BD_DEBUG(DBG_MAIN_PL, "Ignoring dupe title (%s)\n", ent.d_name);
++			}
+ 
+             strncpy(title_list->title_info[ii].name, ent.d_name, 11);
+             title_list->title_info[ii].name[10] = '\0';

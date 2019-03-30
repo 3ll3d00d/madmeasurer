@@ -4,7 +4,6 @@ import os
 import sys
 from pathlib import Path
 import argparse
-import bluread
 import shutil
 
 logger = logging.getLogger('verbose')
@@ -21,21 +20,33 @@ output_logger.addHandler(output_handler)
 
 
 def search_path(p, args):
-    logger.info(f"Searching {p}")
-    for bdmv in glob(f"{p}/**/BDMV/index.bdmv", recursive=True):
-        logger.info(f"Found {bdmv}")
-        bdmv_root = str(Path(bdmv).parent.parent)
-        with bluread.Bluray(bdmv_root) as b:
-            b.Open()
-            parsing_bd(b, bdmv, bdmv_root, args)
+    depth = '/**' if args.depth == -1 else ''.join(['/*'] * args.depth)
+    if args.iso:
+        glob_str = f"{p}{depth}/*.iso"
+    else:
+        glob_str = f"{p}{depth}/BDMV/index.bdmv"
+    logger.info(f"Searching {glob_str}")
+    for match in glob(glob_str, recursive=True):
+        logger.info(f"Found {match}")
+        if not args.iso:
+            target = str(Path(match).parent.parent)
+        else:
+            target = match
+        import bluread
+        with bluread.Bluray(target) as b:
+            b.Open(flags=0x03, min_duration=args.min_duration)
+            parse_bd(b, match, target, args)
 
 
-def parsing_bd(b, bdmv, bdmv_root, args):
+def parse_bd(b, bdmv, bdmv_root, args):
     main_title_idx = b.MainTitleNumber
     main_title = b.GetTitle(main_title_idx)
     main_playlist = main_title.Playlist
     logger.info(f"{bdmv} - main title is {main_playlist}")
-    output_logger.error(f"{bdmv_root}/BDMV/PLAYLIST/{main_playlist}")
+    if args.iso:
+        output_logger.error(f"{bdmv_root},{main_playlist}")
+    else:
+        output_logger.error(f"{bdmv_root}/BDMV/PLAYLIST/{main_playlist}")
     if args.measure is True:
         make_measurements(main_title, bdmv_root, args)
     if args.copy is True:
@@ -50,11 +61,11 @@ def make_measurements(title, bdmv_root, args):
                 if clip.NumberOfVideosPrimary > 0:
                     video = clip.GetVideo(0)
                     if video is not None:
-                        if video.Format == '8':
+                        if video.Format == '2160p':
                             logger.error(f"TODO implement measurement of {bdmv_root}")
                             pass
                         else:
-                            logger.info(f"Ignoring video {bdmv_root}, format is {'1080i' if video.Format == '4' else video.Format}")
+                            logger.info(f"Ignoring video {bdmv_root}, format is {video.Format}")
                     else:
                         logger.error(f"{bdmv_root} main title clip 0 video 0 is None")
                 else:
@@ -90,24 +101,41 @@ def copy_measurements(bdmv_root, main_playlist, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='madmeasurer for BDMV')
-    parser.add_argument('paths', default=[os.getcwd()], nargs='+', help='Path to search (for index.bdmv files)')
-    parser.add_argument('-v', '--verbose', action='count', help='Output additional logging')
+    parser.add_argument('paths', default=[os.getcwd()], nargs='+',
+                        help='Path to search (for index.bdmv files)')
+    parser.add_argument('-v', '--verbose', action='count',
+                        help='Output additional logging, can be added multiple times, use -vvv to see additional debug logging from libbluray')
     parser.add_argument('-f', '--force', action='store_true', default=False,
                         help='if a playlist measurement file already exists, overwrite it from index.bdmv anyway')
     parser.add_argument('-c', '--copy', action='store_true', default=False,
                         help='Copies index.bdmv.measurements to the specified main title location')
     parser.add_argument('-m', '--measure', action='store_true', default=False,
                         help='Calls madMeasureHDR.exe if no measurement file exists and the main title is a UHD')
-    parsed = parser.parse_args(sys.argv[1:])
+    parser.add_argument('-d', '--depth', type=int, default=-1,
+                        help='Maximum folder search depth, if unset will append /** to every search path')
+    parser.add_argument('-i', '--iso', action='store_true', default=False,
+                        help='Search for ISO files instead of index.bdmv')
+    parser.add_argument('--min-duration', type=int, default=30,
+                        help='Minimum playlist duration in minimums to be considered a main title')
+    parsed_args = parser.parse_args(sys.argv[1:])
 
-    if parsed.verbose is None or parsed.verbose == 0:
-        logger.setLevel(logging.ERROR)
-    elif parsed.verbose == 1:
-        logger.setLevel(logging.WARNING)
-    elif parsed.verbose == 2:
-        logger.setLevel(logging.INFO)
-    else:
-        logger.setLevel(logging.DEBUG)
+    valid_args = True
+    if parsed_args.iso is True:
+        if parsed_args.copy is True:
+            print('--copy is not supported with --iso')
+        if parsed_args.measure is True:
+            print('--measure is not supported with --iso')
 
-    for p in parsed.paths:
-        search_path(p, parsed)
+    if valid_args is True:
+        if parsed_args.verbose is None or parsed_args.verbose == 0:
+            logger.setLevel(logging.ERROR)
+        elif parsed_args.verbose == 1:
+            logger.setLevel(logging.WARNING)
+        elif parsed_args.verbose == 2:
+            logger.setLevel(logging.INFO)
+        else:
+            logger.setLevel(logging.DEBUG)
+            os.environ['BD_DEBUG_MASK'] = '0x00140'
+
+        for p in parsed_args.paths:
+            search_path(p, parsed_args)

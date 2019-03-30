@@ -37,10 +37,10 @@ produces
     dist/madmeasurer.exe
     
 ## Usage
-
+    
     madmeasurer.exe -h
     usage: madmeasurer.exe [-h] [-v] [-f] [-c] [-m] [-d DEPTH] [-i]
-                           [--min-duration MIN_DURATION] [-s]
+                           [--min-duration MIN_DURATION] [-s] [--use-lav]
                            paths [paths ...]
     
     madmeasurer for BDMV
@@ -68,6 +68,8 @@ produces
                             a main title
       -s, --silent          Print the main title name only (NB: only make sense
                             when searching for one title)
+      --use-lav             Finds the main title using the same algorithm as
+                            LAVSplitter (longest duration)
 
 
 ## Running Locally

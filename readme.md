@@ -38,6 +38,34 @@ produces
     
 ## Usage
 
+    madmeasurer.exe -h
+    usage: madmeasurer.exe [-h] [-v] [-f] [-c] [-m] [-d DEPTH] [-i]
+                           [--min-duration MIN_DURATION]
+                           paths [paths ...]
+    
+    madmeasurer for BDMV
+    
+    positional arguments:
+      paths                 Path to search (for index.bdmv files)
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -v, --verbose         Output additional logging, can be added multiple
+                            times, use -vvv to see additional debug logging from
+                            libbluray
+      -f, --force           if a playlist measurement file already exists,
+                            overwrite it from index.bdmv anyway
+      -c, --copy            Copies index.bdmv.measurements to the specified main
+                            title location
+      -m, --measure         Calls madMeasureHDR.exe if no measurement file exists
+                            and the main title is a UHD
+      -d DEPTH, --depth DEPTH
+                            Maximum folder search depth, if unset will append /**
+                            to every search path
+      -i, --iso             Search for ISO files instead of index.bdmv
+      --min-duration MIN_DURATION
+                            Minimum playlist duration in minimums to be considered
+                            a main title
 
 
 ## Debugging libbluray

@@ -43,10 +43,13 @@ def parse_bd(b, bdmv, bdmv_root, args):
     main_title = b.GetTitle(main_title_idx)
     main_playlist = main_title.Playlist
     logger.info(f"{bdmv} - main title is {main_playlist}")
-    if args.iso:
-        output_logger.error(f"{bdmv_root},{main_playlist}")
+    if args.silent:
+        output_logger.error(main_playlist)
     else:
-        output_logger.error(f"{bdmv_root}/BDMV/PLAYLIST/{main_playlist}")
+        if args.iso:
+            output_logger.error(f"{bdmv_root},{main_playlist}")
+        else:
+            output_logger.error(f"{os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', main_playlist)}")
     if args.measure is True:
         make_measurements(main_title, bdmv_root, args)
     if args.copy is True:
@@ -117,6 +120,8 @@ if __name__ == '__main__':
                         help='Search for ISO files instead of index.bdmv')
     parser.add_argument('--min-duration', type=int, default=30,
                         help='Minimum playlist duration in minimums to be considered a main title')
+    parser.add_argument('-s', '--silent', action='store_true', default=False,
+                        help='Print the main title name only (NB: only make sense when searching for one title)')
     parsed_args = parser.parse_args(sys.argv[1:])
 
     valid_args = True

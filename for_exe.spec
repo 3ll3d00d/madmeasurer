@@ -7,7 +7,6 @@ a = Analysis(['madmeasurer.py'],
              binaries=None,
              datas=[
                 ('deps\\bluray.dll', '.'),
-                ('deps\\libbluray-j2se-1.0.2.jar', '.')
              ],
              hiddenimports=[],
              hookspath=[],

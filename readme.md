@@ -40,7 +40,7 @@ produces
 
     madmeasurer.exe -h
     usage: madmeasurer.exe [-h] [-v] [-f] [-c] [-m] [-d DEPTH] [-i]
-                           [--min-duration MIN_DURATION]
+                           [--min-duration MIN_DURATION] [-s]
                            paths [paths ...]
     
     madmeasurer for BDMV
@@ -66,7 +66,13 @@ produces
       --min-duration MIN_DURATION
                             Minimum playlist duration in minimums to be considered
                             a main title
+      -s, --silent          Print the main title name only (NB: only make sense
+                            when searching for one title)
 
+
+## Running Locally
+
+* add deps to PYTHONPATH and PATH?
 
 ## Debugging libbluray
 

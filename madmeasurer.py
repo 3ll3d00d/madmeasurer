@@ -20,6 +20,11 @@ output_logger.addHandler(output_handler)
 
 
 def search_path(p, args):
+    '''
+    Searches for BDs to handle in the given path.
+    :param p: the search path.
+    :param args: the cli args.
+    '''
     depth = '/**' if args.depth == -1 else ''.join(['/*'] * args.depth)
     if args.iso:
         glob_str = f"{p}{depth}/*.iso"
@@ -35,12 +40,18 @@ def search_path(p, args):
         import bluread
         with bluread.Bluray(target) as b:
             b.Open(flags=0x03, min_duration=args.min_duration)
-            parse_bd(b, match, target, args)
+            handle_bd(b, match, target, args)
 
 
-def parse_bd(b, bdmv, bdmv_root, args):
-    main_title_idx = b.MainTitleNumber
-    main_title = b.GetTitle(main_title_idx)
+def handle_bd(b, bdmv, bdmv_root, args):
+    '''
+    Processes the given bd.
+    :param b: the (pybluread) Bluray
+    :param bdmv: the bdmv path.
+    :param bdmv_root: the root directory.
+    :param args: the cli args.
+    '''
+    main_title = get_main_title(b, args)
     main_playlist = main_title.Playlist
     logger.info(f"{bdmv} - main title is {main_playlist}")
     if args.silent:
@@ -56,7 +67,43 @@ def parse_bd(b, bdmv, bdmv_root, args):
         copy_measurements(bdmv_root, main_playlist, args)
 
 
+def get_main_title(b, args):
+    '''
+    Locates the main title using either the same algorithm as LAVSplitter BDDemuxer or libbluray
+    '''
+    if args.use_lav is True:
+        main_title_idx = get_main_title_lav(b)
+    else:
+        main_title_idx = b.MainTitleNumber
+    main_title = b.GetTitle(main_title_idx)
+    return main_title
+
+
+def get_main_title_lav(b):
+    '''
+    Locates the main title using a LAVSplitter algorithm.
+    :param b: the pybluread Bluray.
+    :return: the main title number.
+    '''
+    longest_duration = 0
+    main_title_number = -1
+    for title_number in range(b.NumberOfTitles):
+        title = b.GetTitle(title_number)
+        if title.Length > longest_duration:
+            if main_title_number != -1:
+                logger.info(f"Updating main title from {main_title_number} to {title_number}, duration was {longest_duration} is {title.Length}")
+            main_title_number = title_number
+            longest_duration = title.Length
+    return main_title_number
+
+
 def make_measurements(title, bdmv_root, args):
+    '''
+    Triggers madMeasureHDR if the title is a UHD.
+    :param title: the title.
+    :param bdmv_root: the bdmv root dir.
+    :param args: the cli args.
+    '''
     if args.measure is True:
         if title.NumberOfClips > 0:
             clip = title.GetClip(0)
@@ -82,6 +129,12 @@ def make_measurements(title, bdmv_root, args):
 
 
 def copy_measurements(bdmv_root, main_playlist, args):
+    '''
+    Copies the index.bdmv measurements file to the correct for the main title.
+    :param bdmv_root: the bdmv directory.
+    :param main_playlist: the main playlist file name.
+    :param args: the cli args.
+    '''
     measure_src = os.path.join(bdmv_root, 'BDMV', 'index.bdmv.measurements')
     measure_dest = os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', f"{main_playlist}.measurements")
     copy_it = False
@@ -122,6 +175,8 @@ if __name__ == '__main__':
                         help='Minimum playlist duration in minimums to be considered a main title')
     parser.add_argument('-s', '--silent', action='store_true', default=False,
                         help='Print the main title name only (NB: only make sense when searching for one title)')
+    parser.add_argument('--use-lav', action='store_true', default=False,
+                        help='Finds the main title using the same algorithm as LAVSplitter (longest duration)')
     parsed_args = parser.parse_args(sys.argv[1:])
 
     valid_args = True

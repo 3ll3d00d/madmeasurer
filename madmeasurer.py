@@ -34,6 +34,8 @@ def search_path(p, args):
     else:
         if len(p) > 15 and p[-15:] == 'BDMV/index.bdmv' and '*' not in p:
             glob_str = p
+        elif len(p) > 5 and p[-5:] == '.m2ts' and '*' not in p:
+            glob_str = p
         else:
             glob_str = f"{p}{depth}/BDMV/index.bdmv"
     logger.info(f"Searching {glob_str}")
@@ -136,15 +138,33 @@ def make_measurements(title, bdmv, bdmv_root, args):
 
 def do_measure(bdmv, args):
     import subprocess
-    command = [f"{args.madmeasurepath}{os.path.sep}madMeasureHDR.exe", bdmv]
+    exe = "" if args.mad_measure_path is None else f"{args.mad_measure_path}{os.path.sep}"
+    command = [os.path.abspath(f"{exe}madMeasureHDR.exe"), os.path.abspath(bdmv)]
     logger.error(f"Triggering {command}")
-    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    line_num = 0
+    output = None
+    tmp_output = None
     while True:
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-        if output:
-            logger.warning(output.strip())
+        if line_num == 0:
+            output = process.stdout.readline().decode('utf-8')
+            line_num = 1
+        elif line_num == 1:
+            tmp = process.stdout.read(1)
+            if tmp == b'\x08':
+                output = tmp_output
+                tmp_output = ''
+            elif tmp == b'':
+                output = tmp_output
+                tmp_output = ''
+            else:
+                tmp_output = tmp_output + tmp.decode('utf-8')
+        if output is not None:
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                output_logger.error(output.strip())
+        output = None
     rc = process.poll()
     if rc == 0:
         logger.error(f"Completed OK {command}")
@@ -155,12 +175,16 @@ def do_measure(bdmv, args):
 def copy_measurements(bdmv_root, main_playlist, args):
     '''
     Copies the index.bdmv measurements file to the correct for the main title.
-    :param bdmv_root: the bdmv directory.
+    :param bdmv_root: the bdmv directory or iso file name.
     :param main_playlist: the main playlist file name.
     :param args: the cli args.
     '''
-    measure_src = os.path.join(bdmv_root, 'BDMV', 'index.bdmv.measurements')
-    measure_dest = os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', f"{main_playlist}.measurements")
+    if args.iso:
+        measure_src = f"{bdmv_root}[!BDMV!index.bdmv].measurements"
+        measure_dest = f"{bdmv_root}[!BDMV!PLAYLIST!{main_playlist}].measurements"
+    else:
+        measure_src = os.path.join(bdmv_root, 'BDMV', 'index.bdmv.measurements')
+        measure_dest = os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', f"{main_playlist}.measurements")
     copy_it = False
     if os.path.exists(measure_src):
         if os.path.exists(measure_dest):

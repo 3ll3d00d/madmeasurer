@@ -38,10 +38,11 @@ produces
     
 ## Usage
     
-    madmeasurer.exe -h
-    usage: madmeasurer.exe [-h] [-v] [-f] [-c] [-m] [-d DEPTH] [-i]
-                           [--min-duration MIN_DURATION] [-s] [--use-lav]
-                           paths [paths ...]
+    madmeasurer.py -h
+    usage: madmeasurer.py [-h] [-d DEPTH] [-i] [--min-duration MIN_DURATION]
+                          [--use-lav] [-s] [-v] [-f] [-c] [-m]
+                          [--mad-measure-path MAD_MEASURE_PATH]
+                          paths [paths ...]
     
     madmeasurer for BDMV
     
@@ -50,26 +51,36 @@ produces
     
     optional arguments:
       -h, --help            show this help message and exit
+    
+    Search:
+      -d DEPTH, --depth DEPTH
+                            Maximum folder search depth, if unset will append /**
+                            to every search path unless an explicit complete path
+                            to an iso or index.bdmv is provided (in which case it
+                            is ignored
+      -i, --iso             Search for ISO files instead of index.bdmv
+      --min-duration MIN_DURATION
+                            Minimum playlist duration in minimums to be considered
+                            a main title
+      --use-lav             Finds the main title using the same algorithm as
+                            LAVSplitter (longest duration)
+      -s, --silent          Print the main title name only (NB: only make sense
+                            when searching for one title)
+    
+    Diagnostics:
       -v, --verbose         Output additional logging, can be added multiple
                             times, use -vvv to see additional debug logging from
                             libbluray
+    
+    Measure:
       -f, --force           if a playlist measurement file already exists,
                             overwrite it from index.bdmv anyway
       -c, --copy            Copies index.bdmv.measurements to the specified main
                             title location
       -m, --measure         Calls madMeasureHDR.exe if no measurement file exists
                             and the main title is a UHD
-      -d DEPTH, --depth DEPTH
-                            Maximum folder search depth, if unset will append /**
-                            to every search path
-      -i, --iso             Search for ISO files instead of index.bdmv
-      --min-duration MIN_DURATION
-                            Minimum playlist duration in minimums to be considered
-                            a main title
-      -s, --silent          Print the main title name only (NB: only make sense
-                            when searching for one title)
-      --use-lav             Finds the main title using the same algorithm as
-                            LAVSplitter (longest duration)
+      --mad-measure-path MAD_MEASURE_PATH
+                            Path to madMeasureHDR.exe
 
 
 ## Running Locally

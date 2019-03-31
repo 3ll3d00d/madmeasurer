@@ -27,9 +27,15 @@ def search_path(p, args):
     '''
     depth = '/**' if args.depth == -1 else ''.join(['/*'] * args.depth)
     if args.iso:
-        glob_str = f"{p}{depth}/*.iso"
+        if len(p) > 4 and p[-4:] == '.iso' and '*' not in p:
+            glob_str = p
+        else:
+            glob_str = f"{p}{depth}/*.iso"
     else:
-        glob_str = f"{p}{depth}/BDMV/index.bdmv"
+        if len(p) > 15 and p[-15:] == 'BDMV/index.bdmv' and '*' not in p:
+            glob_str = p
+        else:
+            glob_str = f"{p}{depth}/BDMV/index.bdmv"
     logger.info(f"Searching {glob_str}")
     for match in glob(glob_str, recursive=True):
         logger.info(f"Found {match}")
@@ -62,7 +68,7 @@ def handle_bd(b, bdmv, bdmv_root, args):
         else:
             output_logger.error(f"{os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', main_playlist)}")
     if args.measure is True:
-        make_measurements(main_title, bdmv_root, args)
+        make_measurements(main_title, bdmv, bdmv_root, args)
     if args.copy is True:
         copy_measurements(bdmv_root, main_playlist, args)
 
@@ -91,13 +97,14 @@ def get_main_title_lav(b):
         title = b.GetTitle(title_number)
         if title.Length > longest_duration:
             if main_title_number != -1:
-                logger.info(f"Updating main title from {main_title_number} to {title_number}, duration was {longest_duration} is {title.Length}")
+                logger.info(
+                    f"Updating main title from {main_title_number} to {title_number}, duration was {longest_duration} is {title.Length}")
             main_title_number = title_number
             longest_duration = title.Length
     return main_title_number
 
 
-def make_measurements(title, bdmv_root, args):
+def make_measurements(title, bdmv, bdmv_root, args):
     '''
     Triggers madMeasureHDR if the title is a UHD.
     :param title: the title.
@@ -112,8 +119,7 @@ def make_measurements(title, bdmv_root, args):
                     video = clip.GetVideo(0)
                     if video is not None:
                         if video.Format == '2160p':
-                            logger.error(f"TODO implement measurement of {bdmv_root}")
-                            pass
+                            do_measure(bdmv, args)
                         else:
                             logger.info(f"Ignoring video {bdmv_root}, format is {video.Format}")
                     else:
@@ -126,6 +132,24 @@ def make_measurements(title, bdmv_root, args):
             logger.warning(f"{bdmv_root} main title has no clips")
     else:
         logger.debug(f"measure flag not set, ignoring {bdmv_root}")
+
+
+def do_measure(bdmv, args):
+    import subprocess
+    command = [f"{args.madmeasurepath}{os.path.sep}madMeasureHDR.exe", bdmv]
+    logger.error(f"Triggering {command}")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+    while True:
+        output = process.stdout.readline()
+        if output == '' and process.poll() is not None:
+            break
+        if output:
+            logger.warning(output.strip())
+    rc = process.poll()
+    if rc == 0:
+        logger.error(f"Completed OK {command}")
+    else:
+        logger.error(f"FAILED {command}")
 
 
 def copy_measurements(bdmv_root, main_playlist, args):
@@ -159,24 +183,35 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='madmeasurer for BDMV')
     parser.add_argument('paths', default=[os.getcwd()], nargs='+',
                         help='Path to search (for index.bdmv files)')
-    parser.add_argument('-v', '--verbose', action='count',
-                        help='Output additional logging, can be added multiple times, use -vvv to see additional debug logging from libbluray')
-    parser.add_argument('-f', '--force', action='store_true', default=False,
-                        help='if a playlist measurement file already exists, overwrite it from index.bdmv anyway')
-    parser.add_argument('-c', '--copy', action='store_true', default=False,
-                        help='Copies index.bdmv.measurements to the specified main title location')
-    parser.add_argument('-m', '--measure', action='store_true', default=False,
-                        help='Calls madMeasureHDR.exe if no measurement file exists and the main title is a UHD')
-    parser.add_argument('-d', '--depth', type=int, default=-1,
-                        help='Maximum folder search depth, if unset will append /** to every search path')
-    parser.add_argument('-i', '--iso', action='store_true', default=False,
-                        help='Search for ISO files instead of index.bdmv')
-    parser.add_argument('--min-duration', type=int, default=30,
-                        help='Minimum playlist duration in minimums to be considered a main title')
-    parser.add_argument('-s', '--silent', action='store_true', default=False,
-                        help='Print the main title name only (NB: only make sense when searching for one title)')
-    parser.add_argument('--use-lav', action='store_true', default=False,
-                        help='Finds the main title using the same algorithm as LAVSplitter (longest duration)')
+
+    group = parser.add_argument_group('Search')
+    group.add_argument('-d', '--depth', type=int, default=-1,
+                       help='Maximum folder search depth, if unset will append /** to every search path unless an explicit complete path to an iso or index.bdmv is provided (in which case it is ignored')
+    group.add_argument('-i', '--iso', action='store_true', default=False,
+                       help='Search for ISO files instead of index.bdmv')
+    group.add_argument('--min-duration', type=int, default=30,
+                       help='Minimum playlist duration in minimums to be considered a main title')
+    group.add_argument('--use-lav', action='store_true', default=False,
+                       help='Finds the main title using the same algorithm as LAVSplitter (longest duration)')
+    group.add_argument('-s', '--silent', action='store_true', default=False,
+                       help='Print the main title name only (NB: only make sense when searching for one title)')
+    # group.add_argument('--uhd', action='store_true', default=False,
+    #                    help='Restrict search for UHDs only')
+
+    group = parser.add_argument_group('Diagnostics')
+    group.add_argument('-v', '--verbose', action='count',
+                       help='Output additional logging, can be added multiple times, use -vvv to see additional debug logging from libbluray')
+
+    group = parser.add_argument_group('Measure')
+    group.add_argument('-f', '--force', action='store_true', default=False,
+                       help='if a playlist measurement file already exists, overwrite it from index.bdmv anyway')
+    group.add_argument('-c', '--copy', action='store_true', default=False,
+                       help='Copies index.bdmv.measurements to the specified main title location')
+    group.add_argument('-m', '--measure', action='store_true', default=False,
+                       help='Calls madMeasureHDR.exe if no measurement file exists and the main title is a UHD')
+    group.add_argument('--mad-measure-path',
+                       help='Path to madMeasureHDR.exe')
+
     parsed_args = parser.parse_args(sys.argv[1:])
 
     valid_args = True

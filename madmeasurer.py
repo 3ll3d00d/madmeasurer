@@ -22,59 +22,123 @@ output_handler.setFormatter(output_formatter)
 output_logger.addHandler(output_handler)
 
 
-def search_path(p, args):
+class EnvDefault(argparse.Action):
+    '''
+    allows an arg to use an env var as a default value.
+    '''
+    def __init__(self, envvar, required=True, default=None, **kwargs):
+        if not default and envvar:
+            if envvar in os.environ:
+                default = os.environ[envvar]
+        if required and default:
+            required = False
+        super(EnvDefault, self).__init__(default=default, required=required, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+
+
+def search_path(path, args, match_type):
     '''
     Searches for BDs to handle in the given path.
-    :param p: the search path.
+    :param path: the search path.
     :param args: the cli args.
+    :param match_type: the type of file to find.
     '''
     depth = '/**' if args.depth == -1 else ''.join(['/*'] * args.depth)
-    if args.iso:
-        if len(p) > 4 and p[-4:] == '.iso' and '*' not in p:
-            glob_str = p
-        else:
-            glob_str = f"{p}{depth}/*.iso"
+
+    if os.path.exists(path) and os.path.isfile(path):
+        glob_str = path
+        is_index_bdmv = Path(path).name == 'index.bdmv'
     else:
-        if len(p) > 15 and p[-15:] == 'BDMV/index.bdmv' and '*' not in p:
-            glob_str = p
-        elif len(p) > 5 and p[-5:] == '.m2ts' and '*' not in p:
-            glob_str = p
-        else:
-            glob_str = f"{p}{depth}/BDMV/index.bdmv"
-    logger.info(f"Searching {glob_str}")
+        if path[-1] == '/' or path[-1] == '\\':
+            path = path[0:-1]
+        glob_str = f"{path}{depth}/{match_type}"
+        logger.info(f"Searching {glob_str}")
+        is_index_bdmv = match_type == 'BDMV/index.bdmv'
+
     for match in glob(glob_str, recursive=True):
-        logger.info(f"Found {match}")
-        target = match if args.iso is True else str(Path(match).parent.parent)
-        import bluread
-        with bluread.Bluray(target) as b:
-            b.Open(flags=0x03, min_duration=args.min_duration)
-            handle_bd(b, match, target, args)
+        target = match if not is_index_bdmv else str(Path(match).parent.parent)
+        if is_index_bdmv or match_type == '*.iso':
+            open_and_process_bd(args, target, is_index_bdmv)
+        else:
+            # TODO implement
+            logger.error(f"TODO! implement support for {match_type}, ignoring {match}")
 
 
-def handle_bd(b, bdmv, bdmv_root, args):
+def open_and_process_bd(args, target, is_bdmv):
+    '''
+    Opens the BD with libbluray and processes it.
+    :param args: the cli args.
+    :param match: the full path to the matched file.
+    :param target: the path to the root of the BD.
+    :param is_bdmv: true if the search target was an index.bdmv
+    '''
+    import bluread
+    logger.info(f"Opening {target}")
+    with bluread.Bluray(target) as bd:
+        bd.Open(flags=0x03, min_duration=args.min_duration*60)
+        process_bd(bd, is_bdmv, args)
+    logger.info(f"Closing {target}")
+
+
+def process_bd(bd, is_bdmv, args):
     '''
     Processes the given bd.
-    :param b: the (pybluread) Bluray
-    :param bdmv: the bdmv path.
-    :param bdmv_root: the root directory.
+    :param bd: the (pybluread) Bluray
+    :param is_bdmv: true if the search target was an index.bdmv
     :param args: the cli args.
     '''
-    main_title = get_main_title(b, args)
+    main_title, _ = get_main_title(bd, args)
     main_playlist = main_title.Playlist
-    if is_uhd(bdmv_root, main_title) or args.include_hd is True:
-        if args.silent:
-            output_logger.error(main_playlist)
-        else:
-            if args.iso:
-                output_logger.error(f"{bdmv_root},{main_playlist}")
-            else:
-                output_logger.error(f"{os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', main_playlist)}")
-        if args.measure is True:
-            do_measure_if_necessary(bdmv, bdmv_root, args)
-        if args.copy is True:
-            copy_measurements(bdmv_root, main_playlist, args)
+    if args.measure is True or args.copy is True:
+        with mount_if_necessary(bd.Path) as bd_folder_path:
+            process_measurements(bd, bd_folder_path, args)
     else:
-        logger.info(f"Ignoring non UHD BD - {bdmv_root}")
+        if is_uhd(bd.Path, main_title) or args.include_hd is True:
+            if args.silent:
+                output_logger.error(main_playlist)
+            else:
+                if is_bdmv is True:
+                    output_logger.error(f"{os.path.join(bd.Path, 'BDMV', 'PLAYLIST', main_playlist)}")
+                else:
+                    output_logger.error(f"{bd.Path},{main_playlist}")
+        else:
+            logger.info(f"Ignoring non UHD BD - {bd.Path}")
+
+
+def process_measurements(bd, bd_folder_path, args):
+    '''
+    Creates measurement files by measuring or copying as necessary for the requested titles.
+    :param bd: the libbluray Bluray wrapper.
+    :param bd_folder_path: the physical path to the bd folder.
+    :param args: the cli args
+    '''
+    main_title, main_title_idx = get_main_title(bd, args)
+    if args.measure is True:
+        for title_number in range(bd.NumberOfTitles):
+            measure_it = False
+            title = bd.GetTitle(title_number)
+            if is_uhd(bd.Path, title):
+                if title_number == main_title_idx:
+                    measure_it = True
+                    logger.debug(f"Measurement candidate {bd.Path} - {title.Playlist} : main title")
+                elif args.min_playlist_measure_duration is not None:
+                    from bluread.objects import TicksToTuple
+                    title_duration = TicksToTuple(title.Length)
+                    title_duration_mins = (title_duration[0] * 60) + title_duration[1]
+                    if title_duration_mins >= args.min_playlist_measure_duration:
+                        logger.info(f"Measurement candidate {bd.Path} - {title.Playlist} : length is {title.LengthFancy}")
+                        measure_it = True
+                if measure_it is True:
+                    do_measure_if_necessary(bd_folder_path, title.Playlist, args)
+                else:
+                    logger.debug(f"No measurement required for {bd.Path} - {title.Playlist}")
+            else:
+                logger.debug(f"Ignoring non uhd title {bd.Path} - {title.Playlist}")
+
+    if args.copy is True:
+        copy_measurements(bd.Path, main_title.Playlist, args)
 
 
 def is_uhd(bdmv_root, title):
@@ -83,6 +147,8 @@ def is_uhd(bdmv_root, title):
     :return: true if UHD, false if not.
     '''
     is_uhd = False
+    error = ''
+
     if title.NumberOfClips > 0:
         clip = title.GetClip(0)
         if clip is not None:
@@ -91,13 +157,16 @@ def is_uhd(bdmv_root, title):
                 if video is not None:
                     is_uhd = video.Format == '2160p'
                 else:
-                    logger.error(f"Unable to determine if {bdmv_root} is a UHD; main title clip 0 video 0 = None")
+                    error = 'main title clip 0 video 0 = None'
             else:
-                logger.error(f"Unable to determine if {bdmv_root} is a UHD; main title clip 0 has no videos")
+                error = 'main title clip 0 has no videos'
         else:
-            logger.error(f"Unable to determine if {bdmv_root} is a UHD; main title clip 0 is None")
+            error = 'main title clip 0 is None'
     else:
-        logger.error(f"Unable to determine if {bdmv_root} is a UHD; main title has no clips")
+        error = 'main title has no clips'
+
+    if error != '':
+        logger.error(f"Unable to determine if {bdmv_root} - {title.Playlist} is a UHD; {error}")
     return is_uhd
 
 
@@ -110,7 +179,7 @@ def get_main_title(b, args):
     else:
         main_title_idx = b.MainTitleNumber
     main_title = b.GetTitle(main_title_idx)
-    return main_title
+    return main_title, main_title_idx
 
 
 def get_main_title_lav(b):
@@ -132,44 +201,28 @@ def get_main_title_lav(b):
     return main_title_number
 
 
-def do_measure_if_necessary(bdmv, bdmv_root, args):
-    '''
-    Triggers madMeasureHDR if the title is a UHD.
-    :param bdmv_root: the bdmv root dir.
-    :param args: the cli args.
-    '''
-    measure_src, _ = get_measurement_files(bdmv_root, None, args)
-    trigger_it = False
-    if os.path.exists(measure_src):
-        if args.force is True:
-            logger.warning(f"{measure_src} exists but force is true so remeasuring")
-            trigger_it = True
-        else:
-            logger.info(f"{measure_src} exists and force is false, ignoring")
-    else:
-        logger.info(f"{measure_src} does not exist, measuring")
-        trigger_it = True
-    if trigger_it:
-        do_measure(bdmv, args)
-
-
 @contextmanager
-def mount_if_necessary(iso, args):
+def mount_if_necessary(bd_path):
     '''
     A context manager that can mount and iso and return the mounted path then dismounts afterwards.
     '''
-    target = iso
-    if args.iso is True:
+    target = bd_path
+    is_iso = target[-4:] == '.iso'
+    if is_iso is True:
         if platform.system() == "Windows":
-            target = mount_iso_on_windows(iso)
+            target = mount_iso_on_windows(bd_path)
+            if target is not None:
+                if not os.path.exists(f"{target}/BDMV/index.bdmv"):
+                    logger.error(f"{bd_path} does not contain a BD folder")
+                    target = None
         elif platform.system() == "Linux":
             pass
     try:
         yield target
     finally:
-        if args.iso is True:
+        if is_iso:
             if platform.system() == "Windows":
-                dismount_iso_on_windows(iso)
+                dismount_iso_on_windows(bd_path)
             elif platform.system() == "Linux":
                 pass
 
@@ -180,7 +233,7 @@ def mount_iso_on_windows(iso):
     :param iso: the iso.
     :return: the mounted path.
     '''
-    command = f"PowerShell ((Mount-DiskImage {iso} -Access ReadWrite -PassThru) | Get-Volume).DriveLetter"
+    command = f"PowerShell ((Mount-DiskImage {iso} -PassThru) | Get-Volume).DriveLetter"
     logger.info(f"Triggering : {command}")
     result = subprocess.run(command, capture_output=True)
     if result is not None and result.returncode == 0:
@@ -206,113 +259,108 @@ def dismount_iso_on_windows(iso):
         logger.error(f"Unable to dismount {iso} , stdout: {result.stdout.decode('utf-8')}, stderr: {result.stderr.decode('utf-8')}")
 
 
-def do_measure(bdmv, args):
+def do_measure_if_necessary(bd_folder_path, playlist, args):
     '''
-    Actually triggers madMeasureHDR and bridges the stdout back to this process stdout live
+    Triggers madMeasureHDR if the title is a UHD and the measurements file for the playlist does not exist.
+    :param bd_folder_path: the bdmv root dir.
+    :param args: the cli args.
     '''
-    with mount_if_necessary(bdmv, args) as measure_target:
-        exe = "" if args.mad_measure_path is None else f"{args.mad_measure_path}{os.path.sep}"
-        command = [os.path.abspath(f"{exe}madMeasureHDR.exe"), os.path.abspath(measure_target)]
-        if args.dry_run is True:
-            logger.error(f"DRY RUN! Triggering : {command}")
+    playlist_file = os.path.join(bd_folder_path, 'BDMV', 'PLAYLIST', playlist)
+    measurement_file = f"{playlist_file}.measurements"
+    trigger_it = False
+    if os.path.exists(measurement_file):
+        if args.force is True:
+            logger.warning(f"Remeasuring : {measurement_file} exists, force is true")
+            trigger_it = True
         else:
-            logger.info(f"Triggering : {command}")
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            line_num = 0
-            output = None
-            tmp_output = None
-            while True:
-                if line_num == 0:
-                    output = process.stdout.readline().decode('utf-8')
-                    line_num = 1
-                elif line_num == 1:
-                    tmp = process.stdout.read(1)
-                    if tmp == b'\x08':
-                        output = tmp_output
-                        tmp_output = ''
-                    elif tmp == b'':
-                        output = tmp_output
-                        tmp_output = ''
-                    else:
-                        tmp_output = tmp_output + tmp.decode('utf-8')
-                if output is not None:
-                    if output == '' and process.poll() is not None:
-                        break
-                    if output:
-                        output_logger.error(output.strip())
-                output = None
-            rc = process.poll()
-            if rc == 0:
-                logger.error(f"Completed OK {command}")
-            else:
-                logger.error(f"FAILED {command}")
-        import time
-        time.sleep(60)
-
-
-def get_measurement_files(bdmv_root, main_playlist, args):
-    '''
-    Gets the measurement files (source and destination)
-    '''
-    if args.iso is True:
-        return get_measurement_files_for_iso(bdmv_root, main_playlist)
+            logger.info(f"Ignoring : {measurement_file} exists, force is false")
     else:
-        return get_measurement_files_for_folder(bdmv_root, main_playlist)
+        logger.info(f"Measuring : {measurement_file} does not exist")
+        trigger_it = True
+    if trigger_it:
+        run_mad_measure_hdr(playlist_file, args)
 
 
-def get_measurement_files_for_folder(bdmv_root, main_playlist):
+def run_mad_measure_hdr(measure_target, args):
     '''
-    Gets the measurement files (source and destination) for a BDMV folder.
+    triggers madMeasureHDR and bridges the stdout back to this process stdout live
+    :param args: the cli args.
+    :param measure_target: file to measure.
     '''
-    measure_src = os.path.join(bdmv_root, 'BDMV', 'index.bdmv.measurements')
-    measure_dest = os.path.join(bdmv_root, 'BDMV', 'PLAYLIST', f"{main_playlist}.measurements")
-    return measure_src, measure_dest
+    exe = "" if args.mad_measure_path is None else f"{args.mad_measure_path}{os.path.sep}"
+    command = [os.path.abspath(f"{exe}madMeasureHDR.exe"), os.path.abspath(measure_target)]
+    if args.dry_run is True:
+        logger.error(f"DRY RUN! Triggering : {command}")
+    else:
+        logger.info(f"Triggering : {command}")
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        line_num = 0
+        output = None
+        tmp_output = None
+        while True:
+            if line_num == 0:
+                output = process.stdout.readline().decode('utf-8')
+                line_num = 1
+            elif line_num == 1:
+                tmp = process.stdout.read(1)
+                if tmp == b'\x08':
+                    output = tmp_output
+                    tmp_output = ''
+                elif tmp == b'':
+                    output = tmp_output
+                    tmp_output = ''
+                else:
+                    tmp_output = tmp_output + tmp.decode('utf-8')
+            if output is not None:
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    output_logger.error(output.strip())
+            output = None
+        rc = process.poll()
+        if rc == 0:
+            logger.error(f"Completed OK {command}")
+        else:
+            logger.error(f"FAILED {command}")
 
 
-def get_measurement_files_for_iso(bdmv_root, main_playlist):
+def copy_measurements(bd_folder_path, main_playlist, args):
     '''
-    Gets the measurement files (source and destination) for an ISO file.
-    '''
-    measure_src = f"{bdmv_root}[!BDMV!index.bdmv].measurements"
-    measure_dest = f"{bdmv_root}[!BDMV!PLAYLIST!{main_playlist}].measurements"
-    return measure_src, measure_dest
-
-
-def copy_measurements(bdmv_root, main_playlist, args):
-    '''
-    Copies the index.bdmv measurements file to the correct for the main title.
-    :param bdmv_root: the bdmv directory or iso file name.
+    Copies an existing index.bdmv measurements file to the correct location for the main title.
+    :param bd_folder_path: the bd folder path.
     :param main_playlist: the main playlist file name.
     :param args: the cli args.
     '''
-    measure_src, measure_dest = get_measurement_files(bdmv_root, main_playlist, args)
+    src_file = os.path.join(bd_folder_path, 'BDMV', 'index.bdmv.measurements')
+    dest_file = os.path.join(bd_folder_path, 'BDMV', 'PLAYLIST', f"{main_playlist}.measurements")
     copy_it = False
-    if os.path.exists(measure_src):
-        if os.path.exists(measure_dest):
+    if os.path.exists(src_file):
+        if os.path.exists(dest_file):
             if args.force is True:
-                logger.info(f"Overwriting {measure_src} -> {measure_dest} as force=True")
+                logger.info(f"Overwriting : {src_file} with {dest_file} as force=True")
                 copy_it = True
             else:
-                logger.info(f"Ignoring {measure_src} , {measure_dest} exists and force=False")
+                logger.info(f"Ignoring : {dest_file} exists and force=False")
         else:
             copy_it = True
-            logger.info(f"Creating {measure_src} -> {measure_dest}")
+            logger.info(f"Creating : {src_file} -> {dest_file}")
     else:
-        logger.info(f"Ignoring {measure_src}, does not exist")
+        logger.info(f"Ignoring : {src_file}, does not exist")
     if copy_it:
         if args.dry_run is True:
-            logger.warning(f"DRY RUN! Copying {measure_src} to {measure_dest}")
+            logger.warning(f"DRY RUN! Copying {src_file} to {dest_file}")
         else:
-            logger.warning(f"Copying {measure_src} to {measure_dest}")
-            shutil.copy2(measure_src, measure_dest)
+            logger.warning(f"Copying {src_file} to {dest_file}")
+            shutil.copy2(src_file, dest_file)
+            logger.warning(f"Copied {src_file} to {dest_file}")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='madmeasurer for BDMV')
-    parser.add_argument('paths', default=[os.getcwd()], nargs='+',
-                        help='Path to search (for index.bdmv files)')
+    arg_parser = argparse.ArgumentParser(description='madmeasurer for BDMV')
+    arg_parser.add_argument('paths', default=[os.getcwd()], nargs='+',
+                            help='Search paths')
 
-    group = parser.add_argument_group('Search')
+    group = arg_parser.add_argument_group('Search')
     group.add_argument('-d', '--depth', type=int, default=-1,
                        help='''
 Maximum folder search depth
@@ -320,60 +368,61 @@ If unset will append /** to every search path unless an explicit complete path t
 ''')
     group.add_argument('-i', '--iso', action='store_true', default=False,
                        help='Search for ISO files instead of index.bdmv')
+    group.add_argument('-e', '--extension', nargs='*', action='append',
+                       help='Search for files with the specified extension(s)')
     group.add_argument('--min-duration', type=int, default=30,
-                       help='Minimum playlist duration in minimums to be considered a main title')
+                       help='Minimum playlist duration in minutes to be considered a main title')
     group.add_argument('--use-lav', action='store_true', default=False,
                        help='Finds the main title using the same algorithm as LAVSplitter (longest duration)')
     group.add_argument('--include-hd', action='store_true', default=False,
                        help='Extend search to cover non UHD BDs')
 
-    group = parser.add_argument_group('Measure')
+    group = arg_parser.add_argument_group('Measure')
     group.add_argument('-f', '--force', action='store_true', default=False,
                        help='if a playlist measurement file already exists, overwrite it from index.bdmv anyway')
     group.add_argument('-c', '--copy', action='store_true', default=False,
                        help='Copies index.bdmv.measurements to the specified main title location')
     group.add_argument('-m', '--measure', action='store_true', default=False,
                        help='Calls madMeasureHDR.exe if no measurement file exists and the main title is a UHD')
-    group.add_argument('--mad-measure-path', help='Path to madMeasureHDR.exe')
+    group.add_argument('--mad-measure-path', action=EnvDefault, required=False, envvar='MAD_MEASURE_HDR_PATH',
+                       help='Path to madMeasureHDR.exe (can set via MAD_MEASURE_HDR_PATH env var)')
+    group.add_argument('--min-playlist-measure-duration', type=int,
+                       help='Use with -m to also measure playlists longer than the specified duration')
 
-    group = parser.add_argument_group('Output')
+    group = arg_parser.add_argument_group('Output')
     group.add_argument('-v', '--verbose', action='count',
                        help='''
     Output additional logging
     Can be added multiple times
     Use -vvv to see additional debug logging from libbluray
     ''')
-    group.add_argument('--dry-run', action='store_true', default=False,
-                       help='Execute without changing any files')
     group.add_argument('-s', '--silent', action='store_true', default=False,
                        help='Print the main title name only (NB: only make sense when searching for one title)')
-    group.add_argument('-o', '--output-mode', default='ALL', choices=['SILENT', 'LOG ONLY', 'ALL'],
-                       help='''
-Controls what type of output is generated
-SILENT is intended for getting the main title name only for a single BD
-LOG ONLY is intended for use with -v and suppresses the SILENT output
-ALL outputs all content 
-''')
+    group.add_argument('--dry-run', action='store_true', default=False,
+                       help='Execute without changing any files')
 
-    parsed_args = parser.parse_args(sys.argv[1:])
+    parsed_args = arg_parser.parse_args(sys.argv[1:])
 
-    valid_args = True
+    if parsed_args.verbose is None or parsed_args.verbose == 0:
+        logger.setLevel(logging.ERROR)
+    elif parsed_args.verbose == 1:
+        logger.setLevel(logging.WARNING)
+    elif parsed_args.verbose == 2:
+        logger.setLevel(logging.INFO)
+    else:
+        logger.setLevel(logging.DEBUG)
+        os.environ['BD_DEBUG_MASK'] = '0x00140'
+
+    file_types = []
     if parsed_args.iso is True:
-        if parsed_args.copy is True:
-            print('--copy is not supported with --iso')
-        if parsed_args.measure is True:
-            print('--measure is not supported with --iso')
-
-    if valid_args is True:
-        if parsed_args.verbose is None or parsed_args.verbose == 0:
-            logger.setLevel(logging.ERROR)
-        elif parsed_args.verbose == 1:
-            logger.setLevel(logging.WARNING)
-        elif parsed_args.verbose == 2:
-            logger.setLevel(logging.INFO)
+        file_types.append('*.iso')
+    else:
+        if parsed_args.extension is not None and len(parsed_args.extension) > 0:
+            for e in parsed_args.extension:
+                file_types.append(f"*.{e}")
         else:
-            logger.setLevel(logging.DEBUG)
-            os.environ['BD_DEBUG_MASK'] = '0x00140'
+            file_types.append('BDMV/index.bdmv')
 
-        for p in parsed_args.paths:
-            search_path(p, parsed_args)
+    for p in parsed_args.paths:
+        for file_type in file_types:
+            search_path(p, parsed_args, file_type)

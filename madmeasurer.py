@@ -65,7 +65,7 @@ def search_path(path, args, match_type):
         else:
             # TODO implement
             logger.error(f"TODO! implement support for {match_type}, ignoring {match}")
-    logger.warning(f"Processed {bds_processed} BDs found in {glob_str}")
+    logger.warning(f"Processed {bds_processed} BD{'' if bds_processed == 1 else 's'} found in {glob_str}")
 
 
 def open_and_process_bd(args, target, is_bdmv):
@@ -214,7 +214,7 @@ def mount_if_necessary(bd_path):
         if platform.system() == "Windows":
             target = mount_iso_on_windows(bd_path)
             if target is not None:
-                if not os.path.exists(f"{target}/BDMV/index.bdmv"):
+                if not os.path.exists(f"{target}BDMV/index.bdmv"):
                     logger.error(f"{bd_path} does not contain a BD folder")
                     target = None
         elif platform.system() == "Linux":
@@ -235,14 +235,15 @@ def mount_iso_on_windows(iso):
     :param iso: the iso.
     :return: the mounted path.
     '''
-    command = f"PowerShell ((Mount-DiskImage {iso} -PassThru) | Get-Volume).DriveLetter"
-    logger.info(f"Triggering : {command}")
+    iso_to_mount = os.path.abspath(iso)
+    command = f"PowerShell ((Mount-DiskImage {iso_to_mount} -PassThru) | Get-Volume).DriveLetter"
+    logger.debug(f"Triggering : {command}")
     result = subprocess.run(command, capture_output=True)
     if result is not None and result.returncode == 0:
-        target = f"{result.stdout.decode('utf-8').rstrip()}:"
-        logger.info(f"Mounted {iso} on {target}")
+        target = f"{result.stdout.decode('utf-8').rstrip()}:{os.path.sep}"
+        logger.info(f"Mounted {iso_to_mount} on {target}")
     else:
-        logger.error(f"Unable to mount {iso} , stdout: {result.stdout.decode('utf-8')}, stderr: {result.stderr.decode('utf-8')}")
+        logger.error(f"Unable to mount {iso_to_mount} , stdout: {result.stdout.decode('utf-8')}, stderr: {result.stderr.decode('utf-8')}")
         target = None
     return target
 
@@ -252,13 +253,14 @@ def dismount_iso_on_windows(iso):
     Dismounts the ISO.
     :param iso: the iso.
     '''
-    command = f"PowerShell Dismount-DiskImage {iso}"
-    logger.info(f"Triggering : {command}")
+    iso_to_dismount = os.path.abspath(iso)
+    command = f"PowerShell Dismount-DiskImage {iso_to_dismount}"
+    logger.debug(f"Triggering : {command}")
     result = subprocess.run(command, capture_output=True)
     if result is not None and result.returncode == 0:
-        logger.info(f"Dismounted {iso}")
+        logger.info(f"Dismounted {iso_to_dismount}")
     else:
-        logger.error(f"Unable to dismount {iso} , stdout: {result.stdout.decode('utf-8')}, stderr: {result.stderr.decode('utf-8')}")
+        logger.error(f"Unable to dismount {iso_to_dismount} , stdout: {result.stdout.decode('utf-8')}, stderr: {result.stderr.decode('utf-8')}")
 
 
 def do_measure_if_necessary(bd_folder_path, playlist, args):

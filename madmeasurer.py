@@ -56,14 +56,16 @@ def search_path(path, args, match_type):
         glob_str = f"{path}{depth}/{match_type}"
         logger.info(f"Searching {glob_str}")
         is_index_bdmv = match_type == 'BDMV/index.bdmv'
-
+    bds_processed = 0
     for match in glob(glob_str, recursive=True):
         target = match if not is_index_bdmv else str(Path(match).parent.parent)
         if is_index_bdmv or match_type == '*.iso':
             open_and_process_bd(args, target, is_index_bdmv)
+            bds_processed = bds_processed + 1
         else:
             # TODO implement
             logger.error(f"TODO! implement support for {match_type}, ignoring {match}")
+    logger.warning(f"Processed {bds_processed} BDs found in {glob_str}")
 
 
 def open_and_process_bd(args, target, is_bdmv):
@@ -123,11 +125,11 @@ def process_measurements(bd, bd_folder_path, args):
                 if title_number == main_title_idx:
                     measure_it = True
                     logger.debug(f"Measurement candidate {bd.Path} - {title.Playlist} : main title")
-                elif args.min_playlist_measure_duration is not None:
+                elif args.measure_all_playlists is True:
                     from bluread.objects import TicksToTuple
                     title_duration = TicksToTuple(title.Length)
                     title_duration_mins = (title_duration[0] * 60) + title_duration[1]
-                    if title_duration_mins >= args.min_playlist_measure_duration:
+                    if title_duration_mins >= args.min_duration:
                         logger.info(f"Measurement candidate {bd.Path} - {title.Playlist} : length is {title.LengthFancy}")
                         measure_it = True
                 if measure_it is True:
@@ -371,7 +373,7 @@ If unset will append /** to every search path unless an explicit complete path t
     group.add_argument('-e', '--extension', nargs='*', action='append',
                        help='Search for files with the specified extension(s)')
     group.add_argument('--min-duration', type=int, default=30,
-                       help='Minimum playlist duration in minutes to be considered a main title')
+                       help='Minimum playlist duration in minutes to be considered a main title or measurement candidate')
     group.add_argument('--use-lav', action='store_true', default=False,
                        help='Finds the main title using the same algorithm as LAVSplitter (longest duration)')
     group.add_argument('--include-hd', action='store_true', default=False,
@@ -386,8 +388,8 @@ If unset will append /** to every search path unless an explicit complete path t
                        help='Calls madMeasureHDR.exe if no measurement file exists and the main title is a UHD')
     group.add_argument('--mad-measure-path', action=EnvDefault, required=False, envvar='MAD_MEASURE_HDR_PATH',
                        help='Path to madMeasureHDR.exe (can set via MAD_MEASURE_HDR_PATH env var)')
-    group.add_argument('--min-playlist-measure-duration', type=int,
-                       help='Use with -m to also measure playlists longer than the specified duration')
+    group.add_argument('--measure-all-playlists', action='store_true', default=False,
+                       help='Use with -m to also measure playlists longer than min-duration')
 
     group = arg_parser.add_argument_group('Output')
     group.add_argument('-v', '--verbose', action='count',
@@ -400,9 +402,11 @@ If unset will append /** to every search path unless an explicit complete path t
                        help='Print the main title name only (NB: only make sense when searching for one title)')
     group.add_argument('--dry-run', action='store_true', default=False,
                        help='Execute without changing any files')
+    group.add_argument('--bd-debug-mask',
+                       help='Specifies a debug mask to be passed as BD_DEBUG_MASK for libbluray')
 
     parsed_args = arg_parser.parse_args(sys.argv[1:])
-
+    os.environ['BD_DEBUG_MASK'] = '0x0'
     if parsed_args.verbose is None or parsed_args.verbose == 0:
         logger.setLevel(logging.ERROR)
     elif parsed_args.verbose == 1:
@@ -412,6 +416,10 @@ If unset will append /** to every search path unless an explicit complete path t
     else:
         logger.setLevel(logging.DEBUG)
         os.environ['BD_DEBUG_MASK'] = '0x00140'
+
+    if parsed_args.bd_debug_mask is not None:
+        logger.info(f"Overriding BD_DEBUG_MASK - {parsed_args.bd_debug_mask}")
+        os.environ['BD_DEBUG_MASK'] = parsed_args.bd_debug_mask
 
     file_types = []
     if parsed_args.iso is True:

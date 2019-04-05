@@ -105,3 +105,4 @@ venv.bak/
 
 .idea/
 deps/
+*.csv

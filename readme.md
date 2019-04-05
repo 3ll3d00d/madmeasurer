@@ -40,9 +40,11 @@ produces
     
     madmeasurer.exe -h
     usage: madmeasurer.exe [-h] [-d DEPTH] [-i] [-e [EXTENSION [EXTENSION ...]]]
-                           [--min-duration MIN_DURATION] [--use-lav] [--include-hd]
-                           [-f] [-c] [-m] [--mad-measure-path MAD_MEASURE_PATH]
-                           [--measure-all-playlists] [-v] [-s] [--dry-run]
+                           [--min-duration MIN_DURATION] [--main-by-duration]
+                           [--main-by-mpc-be] [--include-hd] [-f] [-c] [-m]
+                           [--mad-measure-path MAD_MEASURE_PATH]
+                           [--measure-all-playlists] [-v] [-s]
+                           [--analyse-main-algos] [--dry-run]
                            [--bd-debug-mask BD_DEBUG_MASK]
                            paths [paths ...]
     
@@ -66,8 +68,10 @@ produces
       --min-duration MIN_DURATION
                             Minimum playlist duration in minutes to be considered
                             a main title or measurement candidate
-      --use-lav             Finds the main title using the same algorithm as
-                            LAVSplitter (longest duration)
+      --main-by-duration    Finds the main title by comparing playlist duration
+                            only (as per LAVSplitter BDDemuxer)
+      --main-by-mpc-be      Finds the main title via the mpc-be HdmvClipInfo
+                            algorithm
       --include-hd          Extend search to cover non UHD BDs
     
     Measure:
@@ -90,6 +94,8 @@ produces
                             libbluray
       -s, --silent          Print the main title name only (NB: only make sense
                             when searching for one title)
+      --analyse-main-algos  Produces a report showing which titles are determined
+                            as the main title
       --dry-run             Execute without changing any files
       --bd-debug-mask BD_DEBUG_MASK
                             Specifies a debug mask to be passed as BD_DEBUG_MASK

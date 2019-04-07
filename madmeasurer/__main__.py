@@ -110,6 +110,10 @@ def main():
             file_types.append('BDMV/index.bdmv')
 
     if parsed_args.analyse_main_algos:
+        try:
+            os.mkdir('report')
+        except FileExistsError:
+            pass
         csv_handler = logging.FileHandler('report/main_report.csv', mode='w+')
         csv_formatter = logging.Formatter('%(message)s')
         csv_handler.setFormatter(csv_formatter)

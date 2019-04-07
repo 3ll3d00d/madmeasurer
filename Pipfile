@@ -9,6 +9,7 @@ verify_ssl = true
 bluread = "*"
 crudexml = "*"
 pyinstaller = "*"
+pyyaml = "*"
 
 [requires]
 python_version = "3.7"

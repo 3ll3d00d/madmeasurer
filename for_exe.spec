@@ -2,7 +2,7 @@
 
 block_cipher = None
 
-a = Analysis(['madmeasurer.py'],
+a = Analysis(['madmeasurer\\__init__.py'],
              pathex=['C:\\Users\\mattk\\github\\madmeasurer'],
              binaries=None,
              datas=[

@@ -119,8 +119,9 @@ def process_measurements(bd, bd_folder_path, args):
                     title_duration = TicksToTuple(title.Length)
                     title_duration_mins = (title_duration[0] * 60) + title_duration[1]
                     if title_duration_mins >= args.min_duration:
-                        main_logger.info(f"Measurement candidate {bd.Path} - {title.Playlist} : length is {title.LengthFancy}")
-                        measure_it = True
+                        if args.max_duration is None or title_duration_mins <= args.max_duration:
+                            main_logger.info(f"Measurement candidate {bd.Path} - {title.Playlist} : length is {title.LengthFancy}")
+                            measure_it = True
                 if measure_it is True:
                     do_measure_if_necessary(bd_folder_path, title.Playlist, args)
                 else:

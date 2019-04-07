@@ -63,7 +63,9 @@ def main():
     group.add_argument('--mad-measure-path', action=EnvDefault, required=False, envvar='MAD_MEASURE_HDR_PATH',
                        help='Path to madMeasureHDR.exe (can set via MAD_MEASURE_HDR_PATH env var)')
     group.add_argument('--measure-all-playlists', action='store_true', default=False,
-                       help='Use with -m to also measure playlists longer than min-duration')
+                       help='Use with -m to also measure playlists longer than min-duration (and shorter than max-duration if supplied)')
+    group.add_argument('--max-duration', type=int,
+                       help='Maximum playlist duration in minutes for measurements candidates, applies to --measure-all-playlists only')
 
     group = arg_parser.add_argument_group('Output')
     group.add_argument('-v', '--verbose', action='count',
@@ -120,6 +122,11 @@ def main():
         csv_logger.addHandler(csv_handler)
         csv_logger.addHandler(output_handler)
         csv_logger.error('BD,Duration,MPC-BE,libbluray,jriver,Count')
+
+    if parsed_args.measure_all_playlists is True \
+            and parsed_args.max_duration is not None \
+            and parsed_args.max_duration <= parsed_args.min_duration:
+        raise ValueError(f"--max-duration {parsed_args.max_duration} is less than --min-duration {parsed_args.min_duration}")
 
     for p in parsed_args.paths:
         for file_type in file_types:

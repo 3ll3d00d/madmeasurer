@@ -1,8 +1,8 @@
 import os
-from collections import defaultdict
+
+from bluread.objects import TicksToTuple
 
 from madmeasurer.loggers import main_logger
-from bluread.objects import TicksToFancy
 
 
 def main_title_by_algo(bd, bd_folder_path):
@@ -34,15 +34,18 @@ def get_main_titles(bd, bd_folder_path, args):
         main_titles.append(bd.MainTitleNumber)
     if args.main_by_jriver is True:
         main_titles.append(get_main_title_by_jriver(bd, bd_folder_path))
+    if args.main_by_jriver_minute_resolution is True:
+        main_titles.append(get_main_title_by_jriver(bd, bd_folder_path, resolution='minutes'))
     return {x: bd.GetTitle(x) for x in main_titles}
 
 
-def get_main_title_by_jriver(bd, bd_folder_path):
+def get_main_title_by_jriver(bd, bd_folder_path, resolution='seconds'):
     '''
     Locates the main title using JRiver's algorithm which compares entries one by one by duration, audio stream count
     and then playlist name albeit allowing a slightly (within 10%) shorter track with more audio streams to still win.
     :param bd: the pybluread BD.
     :param bd_folder_path: the folder path.
+    :param resolution: the resolution to use when comparison durations.
     :return: the main title.
     '''
     candidate_titles = __read_playlists_from_disc_inf(bd, bd_folder_path)
@@ -65,7 +68,15 @@ def get_main_title_by_jriver(bd, bd_folder_path):
                 cmp = audio_titles - max_audio_titles
 
             if cmp == 0:
-                cmp = title.Length - main_title.Length
+                this_len = TicksToTuple(title.Length)
+                main_len = TicksToTuple(main_title.Length)
+                if resolution == 'minutes':
+                    cmp = ((this_len[0] * 60) + this_len[1]) - ((main_len[0] * 60) + main_len[1])
+                elif resolution == 'seconds':
+                    cmp = ((this_len[0] * 60 * 60) + (this_len[1] * 60) + this_len[2]) \
+                          - ((main_len[0] * 60 * 60) + (main_len[1] * 60) + main_len[2])
+                else:
+                    cmp = title.Length - main_title.Length
                 if cmp == 0:
                     cmp = audio_titles - max_audio_titles
                     if cmp == 0:

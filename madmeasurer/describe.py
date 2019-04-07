@@ -36,7 +36,8 @@ def describe_bd(bd, bd_folder_path, force=False, verbose=False):
             clips = []
             for clip_number in range(t.NumberOfClips):
                 c = t.GetClip(clip_number)
-                clip = {'idx': clip_number, 'video_primary_count': c.NumberOfVideosPrimary}
+                clip = {'idx': clip_number, 'video_primary_count': c.NumberOfVideosPrimary,
+                        'video_secondary_count': c.NumberOfVideosSecondary}
                 videos = []
                 for video_number in range(c.NumberOfVideosPrimary):
                     v = c.GetVideo(video_number)
@@ -46,6 +47,7 @@ def describe_bd(bd, bd_folder_path, force=False, verbose=False):
                 clip['video_primary'] = videos
 
                 clip['audio_primary_count'] = c.NumberOfAudiosPrimary
+                clip['audio_secondary_count'] = c.NumberOfAudiosSecondary
                 audios = []
                 for audio_number in range(c.NumberOfAudiosPrimary):
                     a = c.GetAudio(audio_number)

@@ -50,6 +50,8 @@ def main():
                        help='Finds the main title via the mpc-be HdmvClipInfo algorithm')
     group.add_argument('--main-by-jriver', action='store_true', default=False,
                        help='Finds the main title via the JRiver algorithm')
+    group.add_argument('--main-by-jriver-minute-resolution', action='store_true', default=False,
+                       help='Finds the main title via the JRiver algorithm using minute resolution when comparing durations')
     group.add_argument('--include-hd', action='store_true', default=False,
                        help='Extend search to cover non UHD BDs')
 

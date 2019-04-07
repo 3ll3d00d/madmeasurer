@@ -50,6 +50,8 @@ def main():
                        help='Finds the main title via the mpc-be HdmvClipInfo algorithm')
     group.add_argument('--main-by-jriver', action='store_true', default=False,
                        help='Finds the main title via the JRiver algorithm')
+    group.add_argument('--main-by-jriver-extended', action='store_true', default=False,
+                       help='Extends the JRiver algorithm by resolving conflicts by title duration')
     group.add_argument('--include-hd', action='store_true', default=False,
                        help='Extend search to cover non UHD BDs')
 
@@ -115,7 +117,7 @@ def main():
         csv_handler.setFormatter(csv_formatter)
         csv_logger.addHandler(csv_handler)
         csv_logger.addHandler(output_handler)
-        csv_logger.error('BD,Duration,MPC-BE,libbluray,jriver,All Agree?')
+        csv_logger.error('BD,Duration,MPC-BE,libbluray,jriver,jriver-extended,Count')
 
     for p in parsed_args.paths:
         for file_type in file_types:

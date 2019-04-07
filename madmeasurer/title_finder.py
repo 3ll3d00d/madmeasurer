@@ -16,7 +16,8 @@ def main_title_by_algo(bd, bd_folder_path):
         'libbluray': bd.GetTitle(bd.MainTitleNumber).Playlist,
         'mpc-be': bd.GetTitle(get_main_title_by_mpc_be(bd, bd_folder_path)).Playlist,
         'duration': bd.GetTitle(get_main_title_by_duration(bd)).Playlist,
-        'jriver': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path)).Playlist
+        'jriver': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path)).Playlist,
+        'jriver-extended': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path, extended=True)).Playlist
     }
 
 
@@ -34,13 +35,17 @@ def get_main_titles(bd, bd_folder_path, args):
         main_titles.append(bd.MainTitleNumber)
     if args.main_by_jriver is True:
         main_titles.append(get_main_title_by_jriver(bd, bd_folder_path))
+    if args.main_by_jriver_extended is True:
+        main_titles.append(get_main_title_by_jriver(bd, bd_folder_path, extended=True))
     return {x: bd.GetTitle(x) for x in main_titles}
 
 
-def get_main_title_by_jriver(bd, bd_folder_path):
+def get_main_title_by_jriver(bd, bd_folder_path, extended=False):
     '''
     Locates the main title using JRiver's algorithm
-    :param bd:
+    :param bd: the pybluread BD.
+    :param bd_folder_path: the folder path.
+    :param extended: if true, resolve conflicts in a less naive way.
     :return: the main title.
     '''
     candidate_titles = __read_playlists_from_disc_inf(bd, bd_folder_path)
@@ -60,8 +65,14 @@ def get_main_title_by_jriver(bd, bd_folder_path):
         max_audio_titles[__get_max_audio(v)].append(k)
     for k, v in sorted(max_audio_titles.items(), key=lambda kv: kv[0], reverse=True):
         if len(v) > 1:
-            playlists = [bd.GetTitle(x).Playlist for x in v]
-            main_logger.debug(f"Found {len(v)} candidates with {k} audio streams, using first from {playlists}")
+            titles = [bd.GetTitle(x) for x in v]
+            if extended is True:
+                final_selection = sorted(titles, key=lambda t: t.Length, reverse=True)
+            else:
+                final_selection = titles
+            playlists = {x.Playlist: x.LengthFancy for x in final_selection}
+            conflict_resolver = ' [extended]' if extended is True else ''
+            main_logger.debug(f"Found {len(v)} candidates with {k} audio streams {playlists}{conflict_resolver}")
         return v[0]
     main_logger.error(f"No main title found in {bd.Path}")
     return None

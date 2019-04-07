@@ -12,7 +12,7 @@ def mount_if_necessary(bd_path, args):
     '''
     target = bd_path
     mounted = False
-    main_requires_mount = args.main_by_mpc_be is True or args.analyse_main_algos is True or args.main_by_jriver is True or args.main_by_jriver_extended is True
+    main_requires_mount = args.main_by_mpc_be is True or args.analyse_main_algos is True or args.main_by_jriver is True
     if args.measure is True or args.copy is True or main_requires_mount is True or args.describe_bd is True:
         mounted = target[-4:] == '.iso'
         if mounted is True:

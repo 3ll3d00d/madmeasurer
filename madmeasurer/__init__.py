@@ -78,8 +78,7 @@ def process_bd(bd, is_bdmv, args):
             m2 = bd.GetTitle(get_main_title_by_mpc_be(bd, bd_folder_path)).Playlist
             m3 = bd.GetTitle(bd.MainTitleNumber).Playlist
             m4 = bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path)).Playlist
-            m5 = bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path, extended=True)).Playlist
-            csv_logger.error(f"\"{bd.Path}\",{m1},{m2},{m3},{m4},{m5},{len({m1, m2, m3, m4, m5})}")
+            csv_logger.error(f"\"{bd.Path}\",{m1},{m2},{m3},{m4},{len({m1, m2, m3, m4})}")
         else:
             main_titles = get_main_titles(bd, bd_folder_path, args).values()
             if is_any_title_uhd(bd.Path, main_titles) or args.include_hd is True:

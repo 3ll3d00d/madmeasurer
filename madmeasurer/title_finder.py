@@ -16,8 +16,7 @@ def main_title_by_algo(bd, bd_folder_path):
         'libbluray': bd.GetTitle(bd.MainTitleNumber).Playlist,
         'mpc-be': bd.GetTitle(get_main_title_by_mpc_be(bd, bd_folder_path)).Playlist,
         'duration': bd.GetTitle(get_main_title_by_duration(bd)).Playlist,
-        'jriver': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path)).Playlist,
-        'jriver-extended': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path, extended=True)).Playlist
+        'jriver': bd.GetTitle(get_main_title_by_jriver(bd, bd_folder_path)).Playlist
     }
 
 
@@ -35,47 +34,69 @@ def get_main_titles(bd, bd_folder_path, args):
         main_titles.append(bd.MainTitleNumber)
     if args.main_by_jriver is True:
         main_titles.append(get_main_title_by_jriver(bd, bd_folder_path))
-    if args.main_by_jriver_extended is True:
-        main_titles.append(get_main_title_by_jriver(bd, bd_folder_path, extended=True))
     return {x: bd.GetTitle(x) for x in main_titles}
 
 
-def get_main_title_by_jriver(bd, bd_folder_path, extended=False):
+def get_main_title_by_jriver(bd, bd_folder_path):
     '''
-    Locates the main title using JRiver's algorithm
+    Locates the main title using JRiver's algorithm which compares entries one by one by duration, audio stream count
+    and then playlist name albeit allowing a slightly (within 10%) shorter track with more audio streams to still win.
     :param bd: the pybluread BD.
     :param bd_folder_path: the folder path.
-    :param extended: if true, resolve conflicts in a less naive way.
     :return: the main title.
     '''
     candidate_titles = __read_playlists_from_disc_inf(bd, bd_folder_path)
-
     if len(candidate_titles) == 0:
-        title_durations = {x: bd.GetTitle(x).Length for x in range(bd.NumberOfTitles)}
-        max_duration = sorted(list(title_durations.values()), reverse=True)[0]
-        min_duration = max_duration * 0.9
-        candidate_titles = {k: bd.GetTitle(k) for k, v in title_durations.items() if v >= min_duration}
-        candidate_playlists = {k: v.Playlist for k, v in candidate_titles.items()}
-        main_logger.debug(f"Evaluated {bd.NumberOfTitles} titles by duration, "
-                          f"range: {TicksToFancy(min_duration)} - {TicksToFancy(max_duration)}")
-        main_logger.debug(f"Found {len(candidate_playlists)} candidates {str(list(candidate_playlists.values()))}")
+        candidate_titles = {x: bd.GetTitle(x) for x in range(bd.NumberOfTitles)}
 
-    max_audio_titles = defaultdict(list)
-    for k, v in candidate_titles.items():
-        max_audio_titles[__get_max_audio(v)].append(k)
-    for k, v in sorted(max_audio_titles.items(), key=lambda kv: kv[0], reverse=True):
-        if len(v) > 1:
-            titles = [bd.GetTitle(x) for x in v]
-            if extended is True:
-                final_selection = sorted(titles, key=lambda t: t.Length, reverse=True)
+    max_audio_titles = 0
+    main_title = None
+    main_title_num = 0
+
+    for title_num, title in candidate_titles.items():
+        new_main = False
+        reason = ''
+        if main_title is None:
+            new_main = True
+        else:
+            audio_titles = __get_max_audio(title)
+            cmp = 0
+            if title.Length >= (main_title.Length*0.9):
+                cmp = audio_titles - max_audio_titles
+
+            if cmp == 0:
+                cmp = title.Length - main_title.Length
+                if cmp == 0:
+                    cmp = audio_titles - max_audio_titles
+                    if cmp == 0:
+                        if title.Playlist < main_title.Playlist:
+                            cmp = 1
+                            reason = 'playlist name order'
+                    else:
+                        reason = 'audio stream count'
+                else:
+                    reason = 'duration'
+            elif cmp > 0:
+                reason = 'audio stream count, duration within 10%'
+
+            if cmp > 0:
+                new_main = True
+
+        if new_main is True:
+            if main_title is not None:
+                main_logger.debug(f"New main title found {title.Playlist} vs {main_title.Playlist} : {reason}")
             else:
-                final_selection = titles
-            playlists = {x.Playlist: x.LengthFancy for x in final_selection}
-            conflict_resolver = ' [extended]' if extended is True else ''
-            main_logger.debug(f"Found {len(v)} candidates with {k} audio streams {playlists}{conflict_resolver}")
-        return v[0]
-    main_logger.error(f"No main title found in {bd.Path}")
-    return None
+                main_logger.debug(f"Initialising main title search with {title.Playlist}")
+            main_title = title
+            main_title_num = title_num
+            max_audio_titles = __get_max_audio(title)
+        else:
+            main_logger.debug(f"Main title remains {main_title.Playlist}, discarding {title.Playlist}")
+
+    if main_title is None:
+        main_logger.error(f"No main title found in {bd.Path}")
+
+    return main_title_num
 
 
 def __read_playlists_from_disc_inf(bd, bd_folder_path):

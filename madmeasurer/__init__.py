@@ -174,18 +174,26 @@ def do_measure_if_necessary(bd_folder_path, playlist, args):
     from madmeasurer.loggers import main_logger
     playlist_file = os.path.join(bd_folder_path, 'BDMV', 'PLAYLIST', playlist)
     measurement_file = f"{playlist_file}.measurements"
-    trigger_it = False
+    incomplete_measurements_file = f"{measurement_file}.incomplete"
     if os.path.exists(measurement_file):
-        if args.force is True:
-            main_logger.warning(f"Remeasuring : {measurement_file} exists, force is true")
-            trigger_it = True
-        else:
-            main_logger.info(f"Ignoring : {measurement_file} exists, force is false")
+        trigger_it = __should_trigger_measurement(args, measurement_file)
+    elif os.path.exists(incomplete_measurements_file):
+        trigger_it = __should_trigger_measurement(args, incomplete_measurements_file)
     else:
         main_logger.info(f"Measuring : {measurement_file} does not exist")
         trigger_it = True
     if trigger_it:
         run_mad_measure_hdr(playlist_file, args)
+
+
+def __should_trigger_measurement(args, measurement_file):
+    from madmeasurer.loggers import main_logger
+    if args.force is True:
+        main_logger.warning(f"Remeasuring : {measurement_file} exists, force is true")
+        return True
+    else:
+        main_logger.info(f"Ignoring : {measurement_file} exists, force is false")
+        return False
 
 
 def run_mad_measure_hdr(measure_target, args):

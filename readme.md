@@ -39,41 +39,60 @@ produces
 ## Usage
     
     madmeasurer.exe -h
-    usage: madmeasurer.exe [-h] [-d DEPTH] [-i] [-e [EXTENSION [EXTENSION ...]]]
-                           [--min-duration MIN_DURATION] [--main-by-duration]
-                           [--main-by-mpc-be] [--include-hd] [-f] [-c] [-m]
-                           [--mad-measure-path MAD_MEASURE_PATH]
-                           [--measure-all-playlists] [-v] [-s]
-                           [--analyse-main-algos] [--dry-run]
-                           [--bd-debug-mask BD_DEBUG_MASK]
+    usage: madmeasurer.exe [-h] [-d EXACT_DEPTH] [--max-depth MAX_DEPTH] [-i]
+                           [-e [EXTENSION [EXTENSION ...]]]
+                           [--min-duration MIN_DURATION] [--main-by-libbluray]
+                           [--no-main-by-libbluray] [--main-by-duration]
+                           [--main-by-mpc-be] [--main-by-jriver]
+                           [--main-by-jriver-minute-resolution] [--include-hd]
+                           [-f] [-c] [-m] [--mad-measure-path MAD_MEASURE_PATH]
+                           [--measure-all-playlists] [--max-duration MAX_DURATION]
+                           [-v] [-s] [--analyse-main-algos] [--dry-run]
+                           [--bd-debug-mask BD_DEBUG_MASK] [--describe-bd]
                            paths [paths ...]
-    
+
     madmeasurer for BDMV
-    
+
     positional arguments:
       paths                 Search paths
-    
+
     optional arguments:
       -h, --help            show this help message and exit
-    
+
     Search:
-      -d DEPTH, --depth DEPTH
-                            Maximum folder search depth If unset will append /**
-                            to every search path unless an explicit complete path
-                            to an iso or index.bdmv is provided (in which case it
-                            is ignored)
+      -d EXACT_DEPTH, --exact-depth EXACT_DEPTH
+                            Sets the search depth to the specific folder depth
+                            only, e.g. if -d 2 then search for
+                            <path>/*/*/BDMV/index.bdmv . If neither --exact-depth
+                            nor --max-depth is set then search for /** unless the
+                            path is to a specific file
+      --max-depth MAX_DEPTH
+                            Sets the maximum folder depth to search, e.g. if
+                            --max-depth 2 then search for <path>/BDMV/index.bdmv
+                            and <path>/*/BDMV/index.bdmv and
+                            <path>/*/*/BDMV/index.bdmv. If neither --exact-depth
+                            nor --max-depth is set then search for /** unless the
+                            path is to a specific file
       -i, --iso             Search for ISO files instead of index.bdmv
       -e [EXTENSION [EXTENSION ...]], --extension [EXTENSION [EXTENSION ...]]
                             Search for files with the specified extension(s)
       --min-duration MIN_DURATION
                             Minimum playlist duration in minutes to be considered
                             a main title or measurement candidate
+      --main-by-libbluray   Finds main titles via the libbluray algorithm, this is
+                            the default algorithm
+      --no-main-by-libbluray
+                            Disables use of the libbluray algorithm
       --main-by-duration    Finds the main title by comparing playlist duration
                             only (as per LAVSplitter BDDemuxer)
       --main-by-mpc-be      Finds the main title via the mpc-be HdmvClipInfo
                             algorithm
+      --main-by-jriver      Finds the main title via the JRiver algorithm
+      --main-by-jriver-minute-resolution
+                            Finds the main title via the JRiver algorithm using
+                            minute resolution when comparing durations
       --include-hd          Extend search to cover non UHD BDs
-    
+
     Measure:
       -f, --force           if a playlist measurement file already exists,
                             overwrite it from index.bdmv anyway
@@ -86,8 +105,11 @@ produces
                             MAD_MEASURE_HDR_PATH env var)
       --measure-all-playlists
                             Use with -m to also measure playlists longer than min-
-                            duration
-    
+                            duration (and shorter than max-duration if supplied)
+      --max-duration MAX_DURATION
+                            Maximum playlist duration in minutes for measurements
+                            candidates, applies to --measure-all-playlists only
+
     Output:
       -v, --verbose         Output additional logging Can be added multiple times
                             Use -vvv to see additional debug logging from
@@ -100,7 +122,9 @@ produces
       --bd-debug-mask BD_DEBUG_MASK
                             Specifies a debug mask to be passed as BD_DEBUG_MASK
                             for libbluray
-
+      --describe-bd         Outputs a description of the disc in YAML format to
+                            the BD folder directory
+                        
 ## Examples
 
 ### Get the main playlist for a single title
@@ -247,6 +271,13 @@ Searching at a specific depth with `-d`
 
     $ madmeasurer.exe -d1 -vv -m --dry-run "w:"
     2019-04-04 22:34:50,766 - Searching w:/*/BDMV/index.bdmv
+
+Searching to a maximum depth with `--max-depth`
+
+    $ madmeasurer.exe --max-depth 2 -vv -m --dry-run "w:"
+    2019-04-04 22:34:50,766 - Searching w:/BDMV/index.bdmv
+    2019-04-04 22:34:50,766 - Searching w:/*/BDMV/index.bdmv
+    2019-04-04 22:34:50,766 - Searching w:/*/*/BDMV/index.bdmv
 
 Searching recursively through an entire path 
 

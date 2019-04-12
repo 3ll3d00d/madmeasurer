@@ -10,16 +10,16 @@ from madmeasurer.title_finder import get_main_titles, get_main_title_by_duration
 from madmeasurer.describe import describe_bd
 
 
-def search_path(path, args, match_type):
+def search_path(path, args, match_type, depth):
     '''
     Searches for BDs to handle in the given path.
     :param path: the search path.
     :param args: the cli args.
     :param match_type: the type of file to find.
+    :param the search depth:
     '''
     from madmeasurer.loggers import main_logger
-    depth = '/**' if args.depth == -1 else ''.join(['/*'] * args.depth)
-
+    depth = '/**' if depth == -1 else ''.join(['/*'] * depth)
     if os.path.exists(path) and os.path.isfile(path):
         glob_str = path
         is_index_bdmv = Path(path).name == 'index.bdmv'

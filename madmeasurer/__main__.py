@@ -29,11 +29,10 @@ def main():
                             help='Search paths')
 
     group = arg_parser.add_argument_group('Search')
-    group.add_argument('-d', '--depth', type=int, default=-1,
-                       help='''
-    Maximum folder search depth
-    If unset will append /** to every search path unless an explicit complete path to an iso or index.bdmv is provided (in which case it is ignored)
-    ''')
+    group.add_argument('-d', '--exact-depth', type=int,
+                       help='Sets the search depth to the specific folder depth only, e.g. if -d 2 then search for <path>/*/*/BDMV/index.bdmv . If neither --exact-depth nor --max-depth is set then search for /** unless the path is to a specific file')
+    group.add_argument('--max-depth', type=int,
+                       help='Sets the maximum folder depth to search, e.g. if --max-depth 2 then search for <path>/BDMV/index.bdmv and <path>/*/BDMV/index.bdmv and <path>/*/*/BDMV/index.bdmv. If neither --exact-depth nor --max-depth is set then search for /** unless the path is to a specific file')
     group.add_argument('-i', '--iso', action='store_true', default=False,
                        help='Search for ISO files instead of index.bdmv')
     group.add_argument('-e', '--extension', nargs='*', action='append',
@@ -132,7 +131,20 @@ def main():
 
     for p in parsed_args.paths:
         for file_type in file_types:
-            search_path(p, parsed_args, file_type)
+            if os.path.exists(p) and os.path.isfile(p):
+                search_path(p, parsed_args, file_type, 0)
+            else:
+                if parsed_args.exact_depth is not None or parsed_args.max_depth is not None:
+                    if parsed_args.exact_depth is not None:
+                        min_depth = parsed_args.exact_depth
+                        max_depth = min_depth
+                    else:
+                        min_depth = 0
+                        max_depth = parsed_args.max_depth
+                    for depth in range(min_depth, max_depth + 1):
+                        search_path(p, parsed_args, file_type, depth)
+                else:
+                    search_path(p, parsed_args, file_type, -1)
 
 
 if __name__ == '__main__':

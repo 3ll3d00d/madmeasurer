@@ -57,8 +57,14 @@ def open_and_process_bd(args, target, is_bdmv):
     import bluread
     main_logger.info(f"Opening {target}")
     with bluread.Bluray(target) as bd:
-        bd.Open(flags=0x03, min_duration=args.min_duration * 60)
-        process_bd(bd, is_bdmv, args)
+        try:
+            bd.Open(flags=0x03, min_duration=args.min_duration * 60)
+            process_bd(bd, is_bdmv, args)
+        except Exception as e:
+            if 'Failed to get titles' in str(e):
+                main_logger.info(f"{target} has no titles longer than {args.min_duration}, ignoring")
+            else:
+                main_logger.exception(f"Unable to read {target}, ignoring")
     main_logger.info(f"Closing {target}")
 
 

@@ -10,6 +10,7 @@ bluread = "*"
 crudexml = "*"
 pyinstaller = "*"
 pyyaml = "*"
+enzyme = "*"
 
 [requires]
 python_version = "3.7"

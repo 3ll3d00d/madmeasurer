@@ -39,11 +39,36 @@ def search_path(path, args, match_type, depth):
         if is_index_bdmv or match_type == '*.iso':
             open_and_process_bd(args, os.path.abspath(target), is_index_bdmv)
             bds_processed = bds_processed + 1
+        elif match_type[2:] == 'mkv':
+            process_mkv(os.path.abspath(target), args)
         else:
             main_logger.info(f"Target found for {match_type}, measuring {target}")
             do_measure_if_necessary(os.path.abspath(target), args)
 
     main_logger.warning(f"Completed search of {glob_str}, processed {bds_processed} {match_type_desc}{'' if bds_processed == 1 else 's'}")
+
+
+def process_mkv(target, args):
+    '''
+    Examines the mkv with enzyme and checks if it is a UHD file.
+    :param args: the cli args.
+    :param target: the full path to the matched file.
+    '''
+    if args.include_hd is True or __is_uhd_mkv(target) is True:
+        do_measure_if_necessary(target, args)
+    else:
+        from madmeasurer.loggers import main_logger
+        main_logger.info(f"Ignoring {target}, is not UHD and include-hd is false")
+
+
+def __is_uhd_mkv(target):
+    with open(target, 'rb') as mkv_f:
+        import enzyme
+        mkv = enzyme.MKV(mkv_f)
+        if len(mkv.video_tracks) > 0:
+            uhd_track = next((v for v in mkv.video_tracks if v.display_width > 1920), None)
+            return uhd_track is not None
+    return False
 
 
 def open_and_process_bd(args, target, is_bdmv):

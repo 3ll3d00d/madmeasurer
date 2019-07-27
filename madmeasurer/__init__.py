@@ -215,35 +215,40 @@ def run_mad_measure_hdr(measure_target, args):
         main_logger.error(f"DRY RUN! Triggering : {command}")
     else:
         main_logger.info(f"Triggering : {command}")
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=4)
-        line_num = 0
-        output = None
-        tmp_output = None
-        while True:
-            if line_num == 0:
-                output = process.stdout.readline().decode('utf-8')
-                line_num = 1
-            elif line_num == 1:
-                tmp = process.stdout.read(1)
-                if tmp == b'\x08':
-                    output = tmp_output
-                    tmp_output = ''
-                elif tmp == b'':
-                    output = tmp_output
-                    tmp_output = ''
-                else:
-                    tmp_output = tmp_output + tmp.decode('utf-8')
-            if output is not None:
-                if output == '' and process.poll() is not None:
-                    break
-                if output:
-                    output_logger.error(output.strip())
+        txt_output = os.path.abspath(f"{measure_target}-madvr.txt")
+        with open(txt_output, 'w') as details:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=4)
+            line_num = 0
             output = None
-        rc = process.poll()
-        if rc == 0:
-            main_logger.error(f"Completed OK {command}")
-        else:
-            main_logger.error(f"FAILED {command}")
+            tmp_output = None
+            while True:
+                if line_num == 0:
+                    output = process.stdout.readline().decode('utf-8')
+                    line_num = 1
+                elif line_num == 1:
+                    tmp = process.stdout.read(1)
+                    if tmp == b'\x08':
+                        output = tmp_output
+                        tmp_output = ''
+                    elif tmp == b'':
+                        output = tmp_output
+                        tmp_output = ''
+                    else:
+                        tmp_output = tmp_output + tmp.decode('utf-8')
+                if output is not None:
+                    if output == '' and process.poll() is not None:
+                        break
+                    if output:
+                        txt = output.strip()
+                        output_logger.error(txt)
+                        details.write(txt + '\n')
+                        details.flush()
+                output = None
+            rc = process.poll()
+            if rc == 0:
+                main_logger.error(f"Completed OK {command}")
+            else:
+                main_logger.error(f"FAILED {command}")
 
 
 def copy_measurements(bd_folder_path, main_playlist, args):

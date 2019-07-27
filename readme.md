@@ -74,7 +74,7 @@ produces
                             nor --max-depth is set then search for /** unless the
                             path is to a specific file
       -i, --iso             Search for ISO files instead of index.bdmv
-      -e [EXTENSION [EXTENSION ...]], --extension [EXTENSION [EXTENSION ...]]
+      -e EXTENSION, --extension EXTENSION
                             Search for files with the specified extension(s)
       --min-duration MIN_DURATION
                             Minimum playlist duration in minutes to be considered
@@ -303,6 +303,19 @@ All of the previous options work with iso files instead by passing `-i`
     2019-04-04 22:43:17,769 - Processed 2 BDs found in w:/*/*.iso
 
 Note that the ISO will be mounted using a `PowerShell` cmdlet (`Mount-DiskImage`) and measurements file will be written into the ISO.
+
+## Measuring Other File Types
+
+Other file types can be measured using `-e` to specify the file extension, multiple extensions can be used in one path.
+BD folder specific options are ignored (e.g. title duration) as the underlying file is not parsed, it is just passed directly to madMeasureHDR.exe
+
+    $ madmeasurer.exe -e mkv -e ts -vv -d0 w:\Videos
+    2019-07-27 11:19:41,404 - Searching w:\Videos/*.mkv
+    2019-07-27 11:19:41,405 - Target found for *.mkv, measuring w:\Videos\9 to 5.mkv
+    2019-07-27 11:19:41,406 - Measuring : w:\Videos\9 to 5.mkv.measurements does not exist
+    2019-07-27 11:19:41,407 - Completed search of w:\Videos/*.mkv, processed 0 BDs
+    2019-07-27 11:19:41,408 - Searching w:\Videos/*.ts
+    2019-07-27 11:19:41,408 - Completed search of w:\Videos/*.ts, processed 0 BDs
 
 ## Running Locally
 

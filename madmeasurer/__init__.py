@@ -30,19 +30,20 @@ def search_path(path, args, match_type, depth):
         main_logger.info(f"Searching {glob_str}")
         is_index_bdmv = match_type == 'BDMV/index.bdmv'
 
+    match_type_desc = 'BD' if match_type == 'BDMV/index.bdmv' else match_type[2:] + ' file'
     bds_processed = 0
     for match in glob(glob_str, recursive=True):
         if bds_processed > 0 and bds_processed % 10 == 0:
-            main_logger.warning(f"Processed {bds_processed} BDs")
+            main_logger.warning(f"Processed {bds_processed} {match_type_desc}s")
         target = match if not is_index_bdmv else str(Path(match).parent.parent)
         if is_index_bdmv or match_type == '*.iso':
             open_and_process_bd(args, os.path.abspath(target), is_index_bdmv)
             bds_processed = bds_processed + 1
         else:
-            # TODO implement
-            main_logger.error(f"TODO! implement support for {match_type}, ignoring {match}")
+            main_logger.info(f"Target found for {match_type}, measuring {target}")
+            do_measure_if_necessary(os.path.abspath(target), args)
 
-    main_logger.warning(f"Completed search of {glob_str}, processed {bds_processed} BD{'' if bds_processed == 1 else 's'}")
+    main_logger.warning(f"Completed search of {glob_str}, processed {bds_processed} {match_type_desc}{'' if bds_processed == 1 else 's'}")
 
 
 def open_and_process_bd(args, target, is_bdmv):
@@ -130,7 +131,8 @@ def process_measurements(bd, bd_folder_path, args):
                             main_logger.info(f"Measurement candidate {bd.Path} - {title.Playlist} : length is {title.LengthFancy}")
                             measure_it = True
                 if measure_it is True:
-                    do_measure_if_necessary(bd_folder_path, title.Playlist, args)
+                    playlist_file = os.path.join(bd_folder_path, 'BDMV', 'PLAYLIST', title.Playlist)
+                    do_measure_if_necessary(playlist_file, args)
                 else:
                     main_logger.debug(f"No measurement required for {bd.Path} - {title.Playlist}")
             else:
@@ -171,15 +173,14 @@ def is_any_title_uhd(bdmv_root, titles):
     return is_uhd
 
 
-def do_measure_if_necessary(bd_folder_path, playlist, args):
+def do_measure_if_necessary(target_file, args):
     '''
     Triggers madMeasureHDR if the title is a UHD and the measurements file for the playlist does not exist.
-    :param bd_folder_path: the bdmv root dir.
+    :param target_file: the file to measure
     :param args: the cli args.
     '''
     from madmeasurer.loggers import main_logger
-    playlist_file = os.path.join(bd_folder_path, 'BDMV', 'PLAYLIST', playlist)
-    measurement_file = f"{playlist_file}.measurements"
+    measurement_file = f"{target_file}.measurements"
     incomplete_measurements_file = f"{measurement_file}.incomplete"
     if os.path.exists(measurement_file):
         trigger_it = __should_trigger_measurement(args, measurement_file)
@@ -189,7 +190,7 @@ def do_measure_if_necessary(bd_folder_path, playlist, args):
         main_logger.info(f"Measuring : {measurement_file} does not exist")
         trigger_it = True
     if trigger_it:
-        run_mad_measure_hdr(playlist_file, args)
+        run_mad_measure_hdr(target_file, args)
 
 
 def __should_trigger_measurement(args, measurement_file):
@@ -214,41 +215,44 @@ def run_mad_measure_hdr(measure_target, args):
     if args.dry_run is True:
         main_logger.error(f"DRY RUN! Triggering : {command}")
     else:
-        main_logger.info(f"Triggering : {command}")
-        txt_output = os.path.abspath(f"{measure_target}-madvr.txt")
-        with open(txt_output, 'w') as details:
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=4)
-            line_num = 0
-            output = None
-            tmp_output = None
-            while True:
-                if line_num == 0:
-                    output = process.stdout.readline().decode('utf-8')
-                    line_num = 1
-                elif line_num == 1:
-                    tmp = process.stdout.read(1)
-                    if tmp == b'\x08':
-                        output = tmp_output
-                        tmp_output = ''
-                    elif tmp == b'':
-                        output = tmp_output
-                        tmp_output = ''
-                    else:
-                        tmp_output = tmp_output + tmp.decode('utf-8')
-                if output is not None:
-                    if output == '' and process.poll() is not None:
-                        break
-                    if output:
-                        txt = output.strip()
-                        output_logger.error(txt)
-                        details.write(txt + '\n')
-                        details.flush()
+        if not os.path.isfile(command[0]):
+            main_logger.error(f"FAILED! madMeasureHDR.exe not found at {command[0]}")
+        else:
+            main_logger.info(f"Triggering : {command}")
+            txt_output = os.path.abspath(f"{measure_target}-madvr.txt")
+            with open(txt_output, 'w') as details:
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=4)
+                line_num = 0
                 output = None
-            rc = process.poll()
-            if rc == 0:
-                main_logger.error(f"Completed OK {command}")
-            else:
-                main_logger.error(f"FAILED {command}")
+                tmp_output = None
+                while True:
+                    if line_num == 0:
+                        output = process.stdout.readline().decode('utf-8')
+                        line_num = 1
+                    elif line_num == 1:
+                        tmp = process.stdout.read(1)
+                        if tmp == b'\x08':
+                            output = tmp_output
+                            tmp_output = ''
+                        elif tmp == b'':
+                            output = tmp_output
+                            tmp_output = ''
+                        else:
+                            tmp_output = tmp_output + tmp.decode('utf-8')
+                    if output is not None:
+                        if output == '' and process.poll() is not None:
+                            break
+                        if output:
+                            txt = output.strip()
+                            output_logger.error(txt)
+                            details.write(txt + '\n')
+                            details.flush()
+                    output = None
+                rc = process.poll()
+                if rc == 0:
+                    main_logger.error(f"Completed OK {command}")
+                else:
+                    main_logger.error(f"FAILED {command}")
 
 
 def copy_measurements(bd_folder_path, main_playlist, args):

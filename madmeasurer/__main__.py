@@ -37,7 +37,7 @@ def main():
                        help='Sets the maximum folder depth to search, e.g. if --max-depth 2 then search for <path>/BDMV/index.bdmv and <path>/*/BDMV/index.bdmv and <path>/*/*/BDMV/index.bdmv. If neither --exact-depth nor --max-depth is set then search for /** unless the path is to a specific file')
     group.add_argument('-i', '--iso', action='store_true', default=False,
                        help='Search for ISO files instead of index.bdmv')
-    group.add_argument('-e', '--extension', nargs='*', action='append',
+    group.add_argument('-e', '--extension', action='append',
                        help='Search for files with the specified extension(s)')
     group.add_argument('--min-duration', type=int, default=30,
                        help='Minimum playlist duration in minutes to be considered a main title or measurement candidate')

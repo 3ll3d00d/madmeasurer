@@ -3,9 +3,9 @@ cache:
   directories:
   - "$PIP_CACHE_DIR"
   - "$PIPENV_CACHE_DIR"
-#branches:
-#  except:
-#  - master
+branches:
+  except:
+  - master
 env:
   global:
   - PIP_CACHE_DIR=$HOME/.cache/pip

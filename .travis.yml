@@ -40,7 +40,7 @@ before_script:
 - |
   if [[ -n ${TRAVIS_TAG} ]]
   then
-    echo $TRAVIS_TAG > src/VERSION
+    echo $TRAVIS_TAG > madmeasurer/VERSION
   fi
 script:
 - echo "Look ma no tests"

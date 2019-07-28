@@ -1,0 +1,58 @@
+language: python
+cache:
+  directories:
+  - "$PIP_CACHE_DIR"
+  - "$PIPENV_CACHE_DIR"
+branches:
+  except:
+  - master
+env:
+  global:
+  - PIP_CACHE_DIR=$HOME/.cache/pip
+  - PIPENV_CACHE_DIR=$HOME/.cache/pipenv
+matrix:
+  fast_finish: true
+  include:
+  - name: Conda on Windows
+    os: windows
+    language: shell
+    env:
+    - PATH="/c/tools/miniconda3/:/c/tools/miniconda3/Library/mingw-w64:/c/tools/miniconda3/Library/usr/bin:/c/tools/miniconda3/Library/bin:/c/tools/miniconda3/Scripts:/c/tools/miniconda3/bin:$PATH"
+    - PBIN=pip
+    - PRUN=
+    before_install:
+    - choco install miniconda3 openssl.light nsis
+    - conda config --set always_yes yes --set changeps1 no
+    - conda update -n base -c defaults conda python
+    - conda create -q -n test python=$TRAVIS_PYTHON_VERSION
+    - source activate test
+    - python -m pip install --upgrade pip
+    install:
+    - pip install pipenv
+    - pipenv lock -r | tail -n +2  > requirements.txt
+    - pip install -r requirements.txt
+    - pipenv lock -r --dev | tail -n +2 > requirements.txt
+    - pip install -r requirements.txt
+    - conda list
+    - pip list
+before_script:
+- |
+  if [[ -n ${TRAVIS_TAG} ]]
+  then
+    echo $TRAVIS_TAG > src/VERSION
+  fi
+script:
+- echo "Look ma no tests"
+before_deploy:
+- $PRUN $PBIN install pyinstaller pywin32
+- $PRUN pyinstaller --clean --log-level=INFO -F madmeasurer.spec
+deploy:
+  provider: releases
+  api_key:
+    secure: bkqx51kvjL8adTQoDeWDZpFx6wOPNnClpXLc0K42IQbwVvsHNhtpLy24qYr9gXhxCpgsQBZqcbKqFgWzLFDI2EFZlqDrjkvUk4oAFWTy+8jaEc3CAzHWGqpfQ5hSxuiQUeHyEftu8Hp4ESlbEPDJZM/y8dV35ftsFaFhKXXD5+2jeiMl8l8pvGsS002plULr1o4vSWHajtPOeu6MukrOJYANL90V+PmL0jPAgx06x6xPsXD+9aGm/lvhEF2MIoLwM2wpulATVTfovzuiQ5GjSS/jeA8GFpVNcon4TE3ou/YNXRVgb+ks2UpeudiWHggqPGdWf9Xw1K6x4AtyWc3O0SfXMiqLsPGc4JF+P5doxUqX8rG2iBIuNPTrsRZ9cRUWlhwrk2QNGq3Xmw2+iAQF91pGKoJp2jkMZO4fNlEW7q/cwE1Nc8a2/PQTYJoPQOsUxxKaqRYDel+P3DcUgeSQtuilJArVHMcfmT6WvdilHJZ7fT5f0Axirr6hAWEYoTxe6HhfSfeXr8Bfq+mKNqlIJABryzOMalUSx9lhxnGEJ2zAfsdKO8EgYGI5JLu58gkr5QLVuV3AWynEQfDvzEOKuOartiBxrq26l7N/m53RCL+K/R4F0NTnG3u7fWgKl54a+wQDEY20msp6X1TnWusoVGffjlI6SZTL92YUC69ghHk=
+  file: dist/madmeasurer.exe
+  on:
+    repo: 3ll3d00d/madmeasurer
+    tags: true
+  skip_cleanup: true
+  prerelease: true

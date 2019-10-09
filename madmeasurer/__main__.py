@@ -132,6 +132,10 @@ def main():
         raise ValueError(f"--max-duration {parsed_args.max_duration} is less than --min-duration {parsed_args.min_duration}")
 
     for p in parsed_args.paths:
+        if p[-14:] == 'index.bluray;1':
+            new_path = p[0:-19]
+            main_logger.info(f"J River library entry detected, swapping {p} for {new_path}")
+            p = new_path
         for file_type in file_types:
             if os.path.exists(p) and os.path.isfile(p):
                 search_path(p, parsed_args, file_type, 0)

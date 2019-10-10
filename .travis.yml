@@ -45,7 +45,7 @@ before_script:
 script:
 - echo "Look ma no tests"
 before_deploy:
-- $PRUN $PBIN install pyinstaller pywin32
+- $PRUN $PBIN install pyinstaller pywin32==224
 - $PRUN pyinstaller --clean --log-level=INFO -F madmeasurer.spec
 deploy:
   provider: releases
